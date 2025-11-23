@@ -1,8 +1,8 @@
 [package]
-name = "minesweeper-4d"
+name = "minesweeper_4d"
 version = "0.1.0"
 description = "minesweeper but 4d"
-authors = ["itabesamesa <laura@proton.me>"]
+authors = ["itabesamesa <laura418@proton.me>"]
 license = "MIT"
 edition = "2024"
 
