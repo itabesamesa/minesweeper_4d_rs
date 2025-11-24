@@ -358,7 +358,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "minesweeper-4d"
+name = "minesweeper_4d"
 version = "0.1.0"
 dependencies = [
  "color-eyre",
