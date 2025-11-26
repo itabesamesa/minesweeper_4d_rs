@@ -237,12 +237,12 @@ impl MinesweeperCell {
 struct MinesweeperField {
     state: MinesweeperFieldState,
     dim: Point,
-    newDim: Point,
+    new_dim: Point,
     rng: ThreadRng,
     seed: u64,
-    newSeed: u64,
+    new_seed: u64,
     mines: u16,
-    newMines: u16,
+    new_mines: u16,
     loc: Point,
     area: usize,
     uncovered_cells: u16,
@@ -285,8 +285,8 @@ impl Widget for MinesweeperField {
             if matches!(self.state, MinesweeperFieldState::ClickedMine)
                 || matches!(self.state, MinesweeperFieldState::GaveUp)
                 || matches!(self.state, MinesweeperFieldState::Won) {
-                let mut messageBox = centered_rect(area, 18, 3);
-                messageBox.x -= 1;
+                let mut message_box = centered_rect(area, 18, 3);
+                message_box.x -= 1;
                 let text = vec![
                     self.state.as_str().into()
                 ];
@@ -296,7 +296,7 @@ impl Widget for MinesweeperField {
                     .alignment(Alignment::Center)
                     .wrap(Wrap { trim: true })
                     .render(
-                        messageBox,
+                        message_box,
                         buf
                     );
             }
@@ -308,12 +308,12 @@ impl MinesweeperField {
     fn init(&mut self) {
         self.state = MinesweeperFieldState::New;
         self.dim = Point {x: 4, y: 4, z: 4, w: 4};
-        self.newDim = self.dim;
+        self.new_dim = self.dim;
         self.seed = 0;
-        self.newSeed = self.newSeed;
+        self.new_seed = self.seed;
         self.rng = rand::rng();
         self.mines = 10;
-        self.newMines = self.mines;
+        self.new_mines = self.mines;
         self.loc = Point {x: 0, y: 0, z: 0, w: 0};
         self.uncovered_cells = 0;
         self.delta_mode = true;
@@ -351,11 +351,11 @@ impl MinesweeperField {
     }
 
     fn apply_new(&mut self) {
-        self.dim = self.newDim;
+        self.dim = self.new_dim;
         self.area = self.dim.calc_area();
-        self.seed = self.newSeed;
+        self.seed = self.new_seed;
         //self.rng = rand::rng();
-        self.mines = self.newMines;
+        self.mines = self.new_mines;
     }
 
     fn regenerate(&mut self) {
@@ -508,6 +508,21 @@ impl MinesweeperField {
         }
     }
 
+    fn set_print_zero(&mut self, p: Point) {
+        self.do_in_neighbourhood(p, |s, p| {
+            let t = s.check_in_neighbourhood(p, |s, p| {
+                let cell = s.cell_at(p).unwrap();
+                cell.is_covered && !cell.is_flagged
+            });
+            let cell = s.cell_at(p).unwrap();
+            if cell.rel == 0 {
+                cell.set_print_zero(t);
+            } else {
+                cell.set_print_zero(false);
+            }
+        });
+    }
+
     fn uncover_cell(&mut self, p: Point) {
         let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
         if cell.is_covered && !cell.is_flagged {
@@ -522,9 +537,6 @@ impl MinesweeperField {
                     self.do_in_neighbourhood(p, |s, p| s.uncover_cell(p));
                 }
                 self.uncovered_cells += 1;
-                /*if cell.rel == 0 {
-                    cell.set_print_zero(self.check_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().is_covered))
-                }*/
                 /*if usize::from(self.uncovered_cells+self.mines) == self.area {
                     self.state = MinesweeperFieldState::Won;
                 }*/
@@ -535,12 +547,14 @@ impl MinesweeperField {
                     let cell = s.cell_at(p).unwrap();
                     if !cell.is_flagged {
                         if cell.is_covered || cell.print_zero {
+                            cell.set_covered(false);
                             cell.set_print_zero(false);
                             s.uncover_cell(p);
                         }
                     }
                 });
-            }
+            } //should still set print_zero when not in delta_mode to avoid graphical bugs when
+              //swapping between modes
         }
     }
 
@@ -551,26 +565,27 @@ impl MinesweeperField {
             self.do_in_neighbourhood(p, |s, p| {
                 let cell = s.cell_at(p).unwrap();
                 cell.dec_rel();
-                if cell.rel == 0 {
+                /*if cell.rel == 0 {
                     s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
                         let cell = s.cell_at(p).unwrap();
                         cell.is_covered && !cell.is_flagged
                     })
-                }
+                }*/
             });
         } else {
             //self.do_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().inc_rel());
             self.do_in_neighbourhood(p, |s, p| {
                 let cell = s.cell_at(p).unwrap();
                 cell.inc_rel();
-                if cell.rel == 0 {
+                /*if cell.rel == 0 {
                     s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
                         let cell = s.cell_at(p).unwrap();
                         cell.is_covered && !cell.is_flagged
                     })
-                }
+                }*/
             });
         }
+        self.set_print_zero(p);
     }
 
     fn get_display_width(&self) -> u16 {
@@ -636,7 +651,6 @@ impl Widget for MinesweeperGame {
                     layout[0],
                     self.field.get_display_height().try_into().unwrap()
                 );
-                eprintln!("{:?}", layout);
 
                 self.field.render(
                     fieldArea,
@@ -644,11 +658,12 @@ impl Widget for MinesweeperGame {
                 );
 
                 if self.show_info {
+                    //let dim_str = self.field.dim_to_str();
                     let text = vec![
                         format!("Seed:").into(),
                         //format!("Fields uncovered: {}/{}", self.field.uncovered_cells, (self.field.area as u16)-self.field.mines).into(),
                         format!("Mines Flagged:").into(),
-                        //format!("Dimensions:       {}", self.field.dim_to_str()).into(),
+                        //format!("Dimensions:       {}", dim_str).into(),
                         //format!("Location:         {}", self.field.loc_to_str()).into(),
                         format!("Started at:").into(),
                         //self.field.state.as_str().into(),
@@ -719,14 +734,14 @@ impl Widget for MinesweeperGame {
                     );
             },
             MinesweeperGameState::TooSmall => {
-                let fieldWidth = self.field.get_display_width()+2;
-                let fieldHeight = self.field.get_display_height()+2;
+                let field_width = self.field.get_display_width()+2;
+                let field_height = self.field.get_display_height()+2;
                 let text = vec![
                     "Your terminal is too small".into(),
                     "Recommened minimum size:".into(),
-                    format!("{}x{}", fieldWidth, fieldHeight).into(),
+                    format!("{}x{}", field_width, field_height).into(),
                     "With info panel:".into(),
-                    format!("{}x{}", fieldWidth+self.info_panel_min_width, fieldHeight).into(),
+                    format!("{}x{}", field_width+self.info_panel_min_width, field_height).into(),
                 ];
                 Paragraph::new(text)
                     .block(Block::bordered().title("Too small!!!").title_alignment(Alignment::Center))
