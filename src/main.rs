@@ -152,10 +152,6 @@ impl MinesweeperCell {
         self.is_covered = t;
     }
 
-    fn toggle_flagged(&mut self) {
-        self.is_flagged = !self.is_flagged;
-    }
-
     fn set_coord(&mut self, p: Point) {
         self.coord.x = p.x;
         self.coord.y = p.y;
@@ -178,6 +174,14 @@ impl MinesweeperCell {
     fn inc_all(&mut self) {
         self.abs += 1;
         self.rel += 1;
+    }
+
+    fn inc_rel(&mut self) {
+        self.rel += 1;
+    }
+
+    fn dec_rel(&mut self) {
+        self.rel -= 1;
     }
 
     fn get_light_dark_color(&self, light: Color, dark: Color) -> Color {
@@ -215,12 +219,16 @@ impl MinesweeperCell {
             "  ".to_string()
         } else if self.is_bomb {
             String::from(MinesweeperChar::Bomb.as_str())
-        } else {
-            if self.abs < 10 {
-                char::from_u32(0xff10+(self.abs as u32)).unwrap().to_string()
+        } else if self.print_zero {
+            char::from_u32(0xff10).unwrap().to_string()
+        } else if self.rel != 0 {
+            if 0 < self.rel && self.rel < 10 {
+                char::from_u32(0xff10+(self.rel as u32)).unwrap().to_string()
             } else {
-                format!("{:2}", self.abs)
+                format!("{:2}", self.rel)
             }
+        } else {
+            "  ".to_string()
         }
     }
 }
@@ -229,13 +237,16 @@ impl MinesweeperCell {
 struct MinesweeperField {
     state: MinesweeperFieldState,
     dim: Point,
+    newDim: Point,
     rng: ThreadRng,
     seed: u64,
+    newSeed: u64,
     mines: u16,
+    newMines: u16,
     loc: Point,
     area: usize,
     uncovered_cells: u16,
-    is_rel: bool,
+    delta_mode: bool,
     field: Vec<MinesweeperCell>
 }
 
@@ -249,20 +260,45 @@ impl Widget for MinesweeperField {
         let grid_rows = w_vertical.split(area);
         let grids = grid_rows.iter().flat_map(|&grid_row| z_horizontal.split(grid_row).to_vec());
 
-        for (i, grid) in grids.enumerate() {
-            let w = (i as i16)/self.dim.w;
-            let z = (i as i16)%self.dim.z;
-            let x_constraints = (0..self.dim.x).map(|_| Constraint::Length(2));
-            let y_constraints = (0..self.dim.y).map(|_| Constraint::Length(1));
-            let x_horizontal = Layout::horizontal(x_constraints).spacing(0);
-            let y_vertical = Layout::vertical(y_constraints).spacing(0);
+        if matches!(self.state, MinesweeperFieldState::Paused) {
+            Block::new()
+                .style(Style::default().bg(Color::Rgb(38, 38, 38)))
+                .title_top(Line::from("Game Paused").centered().fg(Color::White))
+                .render(area, buf);
+        } else {
+            for (i, grid) in grids.enumerate() {
+                let w = (i as i16)/self.dim.w;
+                let z = (i as i16)%self.dim.z;
+                let x_constraints = (0..self.dim.x).map(|_| Constraint::Length(2));
+                let y_constraints = (0..self.dim.y).map(|_| Constraint::Length(1));
+                let x_horizontal = Layout::horizontal(x_constraints).spacing(0);
+                let y_vertical = Layout::vertical(y_constraints).spacing(0);
 
-            let rows = y_vertical.split(grid);
-            let cells = rows.iter().flat_map(|&row| x_horizontal.split(row).to_vec());
-            for (j, cell) in cells.enumerate() {
-                let y = (j as i16)/self.dim.y;
-                let x = (j as i16)%self.dim.x;
-                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render(cell, buf)
+                let rows = y_vertical.split(grid);
+                let cells = rows.iter().flat_map(|&row| x_horizontal.split(row).to_vec());
+                for (j, cell) in cells.enumerate() {
+                    let y = (j as i16)/self.dim.y;
+                    let x = (j as i16)%self.dim.x;
+                    self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render(cell, buf);
+                }
+            }
+            if matches!(self.state, MinesweeperFieldState::ClickedMine)
+                || matches!(self.state, MinesweeperFieldState::GaveUp)
+                || matches!(self.state, MinesweeperFieldState::Won) {
+                let mut messageBox = centered_rect(area, 18, 3);
+                messageBox.x -= 1;
+                let text = vec![
+                    self.state.as_str().into()
+                ];
+                Paragraph::new(text)
+                    .block(Block::bordered())
+                    .style(Style::new().white().bg(Color::Rgb(38, 38, 38)))
+                    .alignment(Alignment::Center)
+                    .wrap(Wrap { trim: true })
+                    .render(
+                        messageBox,
+                        buf
+                    );
             }
         }
     }
@@ -272,13 +308,22 @@ impl MinesweeperField {
     fn init(&mut self) {
         self.state = MinesweeperFieldState::New;
         self.dim = Point {x: 4, y: 4, z: 4, w: 4};
+        self.newDim = self.dim;
         self.seed = 0;
+        self.newSeed = self.newSeed;
         self.rng = rand::rng();
         self.mines = 10;
+        self.newMines = self.mines;
         self.loc = Point {x: 0, y: 0, z: 0, w: 0};
         self.uncovered_cells = 0;
-        self.is_rel = true;
+        self.delta_mode = true;
         self.area = self.dim.calc_area();
+        self.fill_field();
+        self.set_active_cell(true);
+        self.place_mines();
+    }
+
+    fn fill_field(&mut self) {
         self.field = vec![
             MinesweeperCell {
                 coord: Point {x: 0, y: 0, z: 0, w: 0},
@@ -303,7 +348,22 @@ impl MinesweeperField {
                 }
             }
         }
+    }
+
+    fn apply_new(&mut self) {
+        self.dim = self.newDim;
+        self.area = self.dim.calc_area();
+        self.seed = self.newSeed;
+        //self.rng = rand::rng();
+        self.mines = self.newMines;
+    }
+
+    fn regenerate(&mut self) {
+        self.field.clear();
+        self.fill_field();
         self.set_active_cell(true);
+        self.place_mines();
+        self.state = MinesweeperFieldState::New;
     }
 
     fn set_active_cell(&mut self, t: bool) {
@@ -351,7 +411,7 @@ impl MinesweeperField {
                         let coord = p.offset(Point {x: x, y: y, z: z, w: w});
                         if (Point {x: -1, y: -1, z: -1, w: -1}) < coord && coord < self.dim {
                             //this comp is on purpose cause it kinda funky...
-                            t &= f(self, coord);
+                            t |= f(self, coord);
                         }
                     }
                 }
@@ -439,20 +499,86 @@ impl MinesweeperField {
         }
     }
 
+    fn uncover_rel_cell(&mut self, p: Point) {
+        let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
+        cell.set_print_zero(false);
+        if cell.is_covered && cell.rel == 0 && !cell.is_flagged {
+            self.do_in_neighbourhood(p, |s, p| s.uncover_rel_cell(p));
+            self.uncovered_cells += 1;
+        }
+    }
+
     fn uncover_cell(&mut self, p: Point) {
         let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
-        if cell.is_bomb && cell.is_covered {
-            cell.set_covered(false);
-            self.state = MinesweeperFieldState::ClickedMine;
-        } else if !cell.is_flagged {
-            cell.set_covered(false);
-            if cell.abs == 0 {
-                self.do_in_neighbourhood(p, |s, p| if s.cell_at(p).unwrap().is_covered {s.uncover_cell(p);})
+        if cell.is_covered && !cell.is_flagged {
+            if cell.is_bomb {
+                cell.set_covered(false);
+                if !matches!(self.state, MinesweeperFieldState::RevealField) {
+                    self.state = MinesweeperFieldState::ClickedMine;
+                }
+            } else {
+                cell.set_covered(false);
+                if cell.abs == 0 {
+                    self.do_in_neighbourhood(p, |s, p| s.uncover_cell(p));
+                }
+                self.uncovered_cells += 1;
+                /*if cell.rel == 0 {
+                    cell.set_print_zero(self.check_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().is_covered))
+                }*/
+                /*if usize::from(self.uncovered_cells+self.mines) == self.area {
+                    self.state = MinesweeperFieldState::Won;
+                }*/
             }
-            /*if cell.rel == 0 {
-                cell.set_print_zero(self.check_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().is_covered))
-            }*/
+        } else if cell.rel == 0 && !cell.is_flagged {
+            if self.delta_mode {
+                self.do_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    if !cell.is_flagged {
+                        if cell.is_covered || cell.print_zero {
+                            cell.set_print_zero(false);
+                            s.uncover_cell(p);
+                        }
+                    }
+                });
+            }
         }
+    }
+
+    fn toggle_flagged(&mut self, p: Point) {
+        let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
+        cell.is_flagged = !cell.is_flagged;
+        if cell.is_flagged {
+            self.do_in_neighbourhood(p, |s, p| {
+                let cell = s.cell_at(p).unwrap();
+                cell.dec_rel();
+                if cell.rel == 0 {
+                    s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
+                        let cell = s.cell_at(p).unwrap();
+                        cell.is_covered && !cell.is_flagged
+                    })
+                }
+            });
+        } else {
+            //self.do_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().inc_rel());
+            self.do_in_neighbourhood(p, |s, p| {
+                let cell = s.cell_at(p).unwrap();
+                cell.inc_rel();
+                if cell.rel == 0 {
+                    s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
+                        let cell = s.cell_at(p).unwrap();
+                        cell.is_covered && !cell.is_flagged
+                    })
+                }
+            });
+        }
+    }
+
+    fn get_display_width(&self) -> u16 {
+        ((self.dim.y+1)*2*self.dim.w-1).try_into().unwrap()
+    }
+
+    fn get_display_height(&self) -> u16 {
+        ((self.dim.y+1)*self.dim.w-1).try_into().unwrap()
     }
 }
 
@@ -461,7 +587,8 @@ struct MinesweeperGame {
     field: MinesweeperField,
     state: MinesweeperGameState,
     show_info: bool,
-    delta_mode: bool,
+    info_panel_min_width: u16,
+    info_panel_max_width: u16,
     obfuscate_on_pause: bool,
     disable_action_on_reveal: bool,
     disable_movement_on_reveal: bool,
@@ -493,11 +620,9 @@ impl Widget for MinesweeperGame {
     fn render(self, area: Rect, buf: &mut Buffer) {
         match self.state {
             MinesweeperGameState::Running => {
-                let fieldWidth = (self.field.dim.y+1)*2*self.field.dim.w-1;
-                let fieldHeight = (self.field.dim.y+1)*self.field.dim.w-1;
                 let layout = Layout::horizontal([
-                    Constraint::Length(fieldWidth.try_into().unwrap()),
-                    Constraint::Max(if self.show_info {50} else {0})
+                    Constraint::Length(self.field.get_display_width().try_into().unwrap()),
+                    Constraint::Max(if self.show_info {self.info_panel_max_width} else {0})
                 ].into_iter()).flex(Flex::Center).split(area);
                 //let vertical = min(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap(), 5);
                 /*let [fieldArea] = Layout::vertical([
@@ -507,7 +632,10 @@ impl Widget for MinesweeperGame {
                     Constraint::Length(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap())
                 ]).flex(Flex::Center).areas(layout[0]);
                 eprintln!("{:?}", fieldVertical);*/
-                let fieldArea = center_vertical(layout[0], fieldHeight.try_into().unwrap());
+                let fieldArea = center_vertical(
+                    layout[0],
+                    self.field.get_display_height().try_into().unwrap()
+                );
                 eprintln!("{:?}", layout);
 
                 self.field.render(
@@ -591,19 +719,19 @@ impl Widget for MinesweeperGame {
                     );
             },
             MinesweeperGameState::TooSmall => {
-                let fieldWidth = (self.field.dim.y+1)*self.field.dim.w+1;
-                let fieldHeight = (self.field.dim.y+1)*self.field.dim.w+1;
+                let fieldWidth = self.field.get_display_width()+2;
+                let fieldHeight = self.field.get_display_height()+2;
                 let text = vec![
                     "Your terminal is too small".into(),
-                    "Recomened minimum size:".into(),
+                    "Recommened minimum size:".into(),
                     format!("{}x{}", fieldWidth, fieldHeight).into(),
                     "With info panel:".into(),
-                    format!("{}x{}", fieldWidth, fieldHeight+50).into(),
+                    format!("{}x{}", fieldWidth+self.info_panel_min_width, fieldHeight).into(),
                 ];
                 Paragraph::new(text)
-                    .block(Block::bordered().title("Game Settings"))
+                    .block(Block::bordered().title("Too small!!!").title_alignment(Alignment::Center))
                     .style(Style::new().white())
-                    .alignment(Alignment::Left)
+                    .alignment(Alignment::Center)
                     .wrap(Wrap { trim: true })
                     .render(
                         area,
@@ -617,10 +745,10 @@ impl Widget for MinesweeperGame {
 impl MinesweeperGame {
     fn init(&mut self) {
         self.field.init();
-        self.field.place_mines();
         self.state = MinesweeperGameState::Running;
         self.show_info = true;
-        self.delta_mode = false;
+        self.info_panel_min_width = 25;
+        self.info_panel_max_width = 50;
         self.obfuscate_on_pause = false;
         self.disable_action_on_reveal = false;
         self.disable_movement_on_reveal = false;
@@ -699,7 +827,18 @@ impl App {
             // it's important to check KeyEventKind::Press to avoid handling key release events
             Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
             Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            Event::Resize(width, height) => {
+                eprintln!("{} {}", width, height);
+                if self.game.field.get_display_height() > height ||
+                    (
+                        self.game.field.get_display_width()+
+                        (if self.game.show_info {self.game.info_panel_min_width} else {0})
+                    ) > width {
+                self.game.state = MinesweeperGameState::TooSmall;
+                } else {
+                    self.game.state = MinesweeperGameState::Running;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -745,6 +884,7 @@ impl App {
                                 self.game.state = MinesweeperGameState::Settings;
                                 self.game.field.state = MinesweeperFieldState::Paused;
                             },
+                            (_, KeyCode::Char('n')) => self.game.field.regenerate(),
                             (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
                             (_, KeyCode::Char('a')) => self.game.field.move_left_z(),
                             (_, KeyCode::Char('d')) => self.game.field.move_right_z(),
@@ -756,45 +896,44 @@ impl App {
                             (_, KeyCode::Down) => self.game.field.move_down_y(),
                             (_, KeyCode::Char('p')) => self.game.field.state = MinesweeperFieldState::Paused,
                             (_, KeyCode::Char(' ')) => self.game.field.uncover_cell(self.game.field.loc),
-                            (_, KeyCode::Char('m') | KeyCode::Char('e')) => self.game.field.cell_at(self.game.field.loc).unwrap().toggle_flagged(),
+                            (_, KeyCode::Char('m') | KeyCode::Char('e')) => self.game.field.toggle_flagged(self.game.field.loc),
                             _ => {}
                         }
                     },
-                    MinesweeperFieldState::ClickedMine | MinesweeperFieldState::GaveUp => {
+                    MinesweeperFieldState::ClickedMine | MinesweeperFieldState::GaveUp | MinesweeperFieldState::Won => {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::RevealField,
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                            (_, KeyCode::Char('n')) => self.game.field.regenerate(),
                             (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
                             _ => {}
                         }
                     },
                     MinesweeperFieldState::Paused => {
                         match (key.modifiers, key.code) {
-                            (_, KeyCode::Esc | KeyCode::Char('q')) | (_, KeyCode::Esc | KeyCode::Char('p'))
+                            (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('p'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::Running,
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                            (_, KeyCode::Char('n')) => self.game.field.regenerate(),
                             (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
                             _ => {}
                         }
                     },
-                    _ => {
-                        match (key.modifiers, key.code) {
-                            (_, KeyCode::Esc | KeyCode::Char('q'))
-                            | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                            (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
-                            _ => {}
-                        }
-                    }
                 }
             },
             MinesweeperGameState::Settings => {
                 match (key.modifiers, key.code) {
-                    (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('o'))
+                    (_, KeyCode::Esc | KeyCode::Char('q'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
                     (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
+                    (_, KeyCode::Char('o')) => {
+                        self.game.field.apply_new();
+                        self.game.field.regenerate();
+                        self.game.state = MinesweeperGameState::Running;
+                    },
                     _ => {}
                 }
             },
@@ -810,6 +949,7 @@ impl App {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
+                    (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
                     _ => {}
                 }
             }
