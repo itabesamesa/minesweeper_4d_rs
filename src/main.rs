@@ -112,7 +112,7 @@ impl Point {
     }
 
     fn calc_area(self) -> usize {
-        return (self.x*self.y*self.z*self.w).try_into().unwrap();
+        (self.x*self.y*self.z*self.w).try_into().unwrap()
     }
 
     fn offset(self, p: Point) -> Point {
@@ -138,13 +138,15 @@ struct MinesweeperCell {
     print_zero: bool
 }
 
-impl Widget for MinesweeperCell {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        buf.set_string(area.left(), area.top(), self.get_string(), Style::default().fg(Color::Black).bg(self.get_color()));
-    }
-}
-
 impl MinesweeperCell {
+    fn render_rel(self, area: Rect, buf: &mut Buffer) {
+        buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+    }
+
+    fn render_abs(self, area: Rect, buf: &mut Buffer) {
+        buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+    }
+
     fn set_bomb(&mut self, t: bool) {
         self.is_bomb = t;
     }
@@ -213,7 +215,7 @@ impl MinesweeperCell {
         }
     }
 
-    fn get_string(&self) -> String {
+    fn get_rel_string(&self) -> String {
         if self.is_flagged {
             String::from(MinesweeperChar::Flag.as_str())
         } else if self.is_covered {
@@ -227,6 +229,24 @@ impl MinesweeperCell {
                 char::from_u32(0xff10+(self.rel as u32)).unwrap().to_string()
             } else {
                 format!("{:2}", self.rel)
+            }
+        } else {
+            "  ".to_string()
+        }
+    }
+
+    fn get_abs_string(&self) -> String {
+        if self.is_flagged {
+            String::from(MinesweeperChar::Flag.as_str())
+        } else if self.is_covered {
+            "  ".to_string()
+        } else if self.is_bomb {
+            String::from(MinesweeperChar::Bomb.as_str())
+        } else if self.abs != 0 {
+            if 0 < self.abs && self.abs < 10 {
+                char::from_u32(0xff10+(self.abs as u32)).unwrap().to_string()
+            } else {
+                format!("{:2}", self.abs)
             }
         } else {
             "  ".to_string()
@@ -280,10 +300,14 @@ impl Widget for MinesweeperField {
 
                 let rows = y_vertical.split(grid);
                 let cells = rows.iter().flat_map(|&row| x_horizontal.split(row).to_vec());
-                for (j, cell) in cells.enumerate() {
+                for (j, cell_area) in cells.enumerate() {
                     let y = (j as i16)/self.dim.y;
                     let x = (j as i16)%self.dim.x;
-                    self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render(cell, buf);
+                    if self.delta_mode {
+                        self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_rel(cell_area, buf);
+                    } else {
+                        self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_abs(cell_area, buf);
+                    }
                 }
             }
             if matches!(self.state, MinesweeperFieldState::ClickedMine)
@@ -507,12 +531,16 @@ impl MinesweeperField {
     }
 
     fn uncover_rel_cell(&mut self, p: Point) {
-        let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
-        cell.set_print_zero(false);
-        if cell.is_covered && cell.rel == 0 && !cell.is_flagged {
-            self.do_in_neighbourhood(p, |s, p| s.uncover_rel_cell(p));
-            self.uncovered_cells += 1;
-        }
+        self.do_in_neighbourhood(p, |s, p| {
+            let cell = s.cell_at(p).unwrap();
+            if !cell.is_flagged {
+                if cell.is_covered || cell.print_zero {
+                    //cell.set_covered(false);
+                    cell.set_print_zero(false);
+                    s.uncover_cell(p);
+                }
+            }
+        });
     }
 
     fn set_print_zero(&mut self, p: Point) {
@@ -532,36 +560,33 @@ impl MinesweeperField {
 
     fn uncover_cell(&mut self, p: Point) {
         let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
-        if cell.is_covered && !cell.is_flagged {
-            if cell.is_bomb {
+        if !cell.is_flagged {
+            if cell.is_covered {
                 cell.set_covered(false);
-                if !matches!(self.state, MinesweeperFieldState::RevealField) {
-                    self.state = MinesweeperFieldState::ClickedMine;
-                }
-            } else {
-                cell.set_covered(false);
-                if cell.abs == 0 {
-                    self.do_in_neighbourhood(p, |s, p| s.uncover_cell(p));
+                if cell.is_bomb {
+                    if !matches!(self.state, MinesweeperFieldState::RevealField) {
+                        self.state = MinesweeperFieldState::ClickedMine;
+                    }
+                } else {
+                    if cell.abs == 0 {
+                        self.do_in_neighbourhood(p, |s, p| s.uncover_cell(p));
+                    } else if cell.rel == 0 {
+                        if self.delta_mode {
+                            self.uncover_rel_cell(p);
+                        } //should still set print_zero when not in delta_mode to avoid graphical bugs when
+                        //swapping between modes
+                    }
                 }
                 self.uncovered_cells += 1;
-                /*if usize::from(self.uncovered_cells+self.mines) == self.area {
+                if usize::from(self.uncovered_cells+self.mines) == self.area {
                     self.state = MinesweeperFieldState::Won;
-                }*/
+                }
+            } else if cell.rel == 0 {
+                if self.delta_mode {
+                    self.uncover_rel_cell(p);
+                } //should still set print_zero when not in delta_mode to avoid graphical bugs when
+                //swapping between modes
             }
-        } else if cell.rel == 0 && !cell.is_flagged {
-            if self.delta_mode {
-                self.do_in_neighbourhood(p, |s, p| {
-                    let cell = s.cell_at(p).unwrap();
-                    if !cell.is_flagged {
-                        if cell.is_covered || cell.print_zero {
-                            cell.set_covered(false);
-                            cell.set_print_zero(false);
-                            s.uncover_cell(p);
-                        }
-                    }
-                });
-            } //should still set print_zero when not in delta_mode to avoid graphical bugs when
-              //swapping between modes
         }
     }
 
@@ -608,7 +633,9 @@ impl MinesweeperField {
             }
         }
         if found {
+            self.set_active_cell(false);
             self.loc = p;
+            self.set_active_cell(true);
             self.uncover_cell(p);
         }
     }
@@ -944,7 +971,7 @@ impl App {
                             (_, KeyCode::Right | KeyCode::Char('l')) => self.game.field.move_right_x(),
                             (_, KeyCode::Up | KeyCode::Char('k')) => self.game.field.move_up_y(),
                             (_, KeyCode::Down | KeyCode::Char('j')) => self.game.field.move_down_y(),
-                            (_, KeyCode::Char('u')) => todo!(),
+                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             (_, KeyCode::Char('f')) => {
                                 self.game.field.find_free_cell();
                                 self.game.field.state = MinesweeperFieldState::Running;
@@ -984,7 +1011,7 @@ impl App {
                             (_, KeyCode::Char(' ')) => self.game.field.uncover_cell(self.game.field.loc),
                             (_, KeyCode::Char('m') | KeyCode::Char('e')) => self.game.field.toggle_flagged(self.game.field.loc),
                             (_, KeyCode::Char('g')) => self.game.field.state = MinesweeperFieldState::GaveUp,
-                            (_, KeyCode::Char('u')) => todo!(),
+                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             _ => {}
                         }
                     },
