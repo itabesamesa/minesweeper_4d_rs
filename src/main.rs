@@ -1,6 +1,4 @@
 use std::cmp::Ordering;
-use std::process;
-use std::cell::RefCell;
 use color_eyre::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}
@@ -8,7 +6,7 @@ use crossterm::{
 use ratatui::{
     DefaultTerminal, Frame,
     style::{Stylize, Style, Color},
-    text::{Line, Span},
+    text::Line,
     widgets::{Widget, Paragraph, Wrap, Block},
     layout::{Constraint, Layout, Rect, Alignment, Flex},
     prelude::Buffer,
@@ -287,7 +285,7 @@ impl Widget for MinesweeperField {
         if matches!(self.state, MinesweeperFieldState::Paused) {
             Block::new()
                 .style(Style::default().bg(Color::Rgb(38, 38, 38)))
-                .title_top(Line::from("Game Paused").centered().fg(Color::White))
+                .title_top(Line::from(self.state.as_str()).centered().fg(Color::White))
                 .render(area, buf);
         } else {
             for (i, grid) in grids.enumerate() {
@@ -395,6 +393,8 @@ impl MinesweeperField {
         self.set_active_cell(true);
         self.place_mines();
         self.state = MinesweeperFieldState::New;
+        self.uncovered_cells = 0;
+        self.flagged_mines = 0;
     }
 
     fn set_active_cell(&mut self, t: bool) {
@@ -545,15 +545,17 @@ impl MinesweeperField {
 
     fn set_print_zero(&mut self, p: Point) {
         self.do_in_neighbourhood(p, |s, p| {
-            let t = s.check_in_neighbourhood(p, |s, p| {
+            if !s.cell_at(p).unwrap().is_covered {
+                let t = s.check_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    cell.is_covered && !cell.is_flagged
+                });
                 let cell = s.cell_at(p).unwrap();
-                cell.is_covered && !cell.is_flagged
-            });
-            let cell = s.cell_at(p).unwrap();
-            if cell.rel == 0 {
-                cell.set_print_zero(t);
-            } else {
-                cell.set_print_zero(false);
+                if cell.rel == 0 {
+                    cell.set_print_zero(t);
+                } else {
+                    cell.set_print_zero(false);
+                }
             }
         });
     }
@@ -563,6 +565,7 @@ impl MinesweeperField {
         if !cell.is_flagged {
             if cell.is_covered {
                 cell.set_covered(false);
+                cell.set_print_zero(false);
                 if cell.is_bomb {
                     if !matches!(self.state, MinesweeperFieldState::RevealField) {
                         self.state = MinesweeperFieldState::ClickedMine;
@@ -581,7 +584,7 @@ impl MinesweeperField {
                 if usize::from(self.uncovered_cells+self.mines) == self.area {
                     self.state = MinesweeperFieldState::Won;
                 }
-            } else if cell.rel == 0 {
+            } else if cell.print_zero { //maybe change back to cell.rel == 0 if it gets too ewwy
                 if self.delta_mode {
                     self.uncover_rel_cell(p);
                 } //should still set print_zero when not in delta_mode to avoid graphical bugs when
@@ -692,14 +695,14 @@ impl Widget for MinesweeperGame {
                     Constraint::Max(if self.show_info {self.info_panel_max_width} else {0})
                 ].into_iter()).flex(Flex::Center).split(area);
                 //let vertical = min(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap(), 5);
-                /*let [fieldArea] = Layout::vertical([
+                /*let [field_area] = Layout::vertical([
                         ((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap()
                     ]).flex(Flex::Center).areas(layout[0]);*/
                 /*let fieldVertical = Layout::vertical([
                     Constraint::Length(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap())
                 ]).flex(Flex::Center).areas(layout[0]);
                 eprintln!("{:?}", fieldVertical);*/
-                let fieldArea = center_vertical(
+                let field_area = center_vertical(
                     layout[0],
                     self.field.get_display_height().try_into().unwrap()
                 );
@@ -715,7 +718,7 @@ impl Widget for MinesweeperGame {
                 let started = self.field.started.format("%Y-%m-%d %H:%M:%S").to_string();
 
                 self.field.render(
-                    fieldArea,
+                    field_area,
                     buf
                 );
 
@@ -723,12 +726,12 @@ impl Widget for MinesweeperGame {
                     let text = vec![
                         "Delta mode:".into(),
                         "Seed:".into(),
-                        "Fields uncovered:".into(),
+                        "Cells uncovered:".into(),
                         "Mines Flagged:".into(),
                         "Dimensions:".into(),
                         "Location:".into(),
                         "Started at:".into(),
-                        state.into(),
+                        "Game state".into(),
                     ];
                     let values = vec![
                         delta_str.into(),
@@ -858,10 +861,6 @@ impl MinesweeperGame {
         self.disable_action_on_reveal = false;
         self.disable_movement_on_reveal = false;
     }
-
-    fn toggle_show_info(&mut self) {
-        self.show_info = !self.show_info;
-    }
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -930,7 +929,7 @@ impl App {
                 self.game.field.get_display_width()+
                 (if self.game.show_info {self.game.info_panel_min_width} else {0})
             ) > width {
-        self.game.state = MinesweeperGameState::TooSmall;
+            self.game.state = MinesweeperGameState::TooSmall;
         } else {
             self.game.state = MinesweeperGameState::Running;
         }
@@ -960,9 +959,13 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                            (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
+                            (_, KeyCode::Char('c')) => {
+                                self.game.state = MinesweeperGameState::Controls;
+                                eprintln!("{:?}", self.game.state);
+                            },
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                            (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
+                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.field.move_left_z(),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.field.move_right_z(),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.field.move_up_w(),
@@ -971,7 +974,6 @@ impl App {
                             (_, KeyCode::Right | KeyCode::Char('l')) => self.game.field.move_right_x(),
                             (_, KeyCode::Up | KeyCode::Char('k')) => self.game.field.move_up_y(),
                             (_, KeyCode::Down | KeyCode::Char('j')) => self.game.field.move_down_y(),
-                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             (_, KeyCode::Char('f')) => {
                                 self.game.field.find_free_cell();
                                 self.game.field.state = MinesweeperFieldState::Running;
@@ -990,15 +992,16 @@ impl App {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
                             (_, KeyCode::Char('c')) => {
-                                self.game.state = MinesweeperGameState::Controls;
                                 self.game.field.state = MinesweeperFieldState::Paused;
+                                self.game.state = MinesweeperGameState::Controls;
                             },
                             (_, KeyCode::Char('o')) => {
-                                self.game.state = MinesweeperGameState::Settings;
                                 self.game.field.state = MinesweeperFieldState::Paused;
+                                self.game.state = MinesweeperGameState::Settings;
                             },
                             (_, KeyCode::Char('n')) => self.game.field.regenerate(),
-                            (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
+                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.field.move_left_z(),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.field.move_right_z(),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.field.move_up_w(),
@@ -1011,7 +1014,6 @@ impl App {
                             (_, KeyCode::Char(' ')) => self.game.field.uncover_cell(self.game.field.loc),
                             (_, KeyCode::Char('m') | KeyCode::Char('e')) => self.game.field.toggle_flagged(self.game.field.loc),
                             (_, KeyCode::Char('g')) => self.game.field.state = MinesweeperFieldState::GaveUp,
-                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             _ => {}
                         }
                     },
@@ -1022,8 +1024,8 @@ impl App {
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.field.regenerate(),
-                            (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
-                            (_, KeyCode::Char('u')) => todo!(),
+                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('u')) => self.game.field.delta_mode = !self.game.field.delta_mode,
                             _ => {}
                         }
                     },
@@ -1034,7 +1036,7 @@ impl App {
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.field.regenerate(),
-                            (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
+                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             _ => {}
                         }
                     },
@@ -1056,16 +1058,18 @@ impl App {
             MinesweeperGameState::Controls => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c'))
-                    | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
+                    | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
                     (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                    _ => {}
+                    _ => {
+                        eprintln!("{:?}", key.code);
+                    }
                 }
             },
             MinesweeperGameState::TooSmall => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                    (_, KeyCode::Char('i')) => self.game.toggle_show_info(),
+                    (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                     _ => {}
                 }
             }
