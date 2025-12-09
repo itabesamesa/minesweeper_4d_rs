@@ -533,13 +533,13 @@ impl MinesweeperField {
     fn uncover_rel_cell(&mut self, p: Point) {
         self.do_in_neighbourhood(p, |s, p| {
             let cell = s.cell_at(p).unwrap();
-            if !cell.is_flagged {
+            //if !cell.is_flagged {
                 if cell.is_covered || cell.print_zero {
-                    //cell.set_covered(false);
+                    //if !cell.is_flagged {cell.set_covered(false);}
                     cell.set_print_zero(false);
                     s.uncover_cell(p);
                 }
-            }
+            //}
         });
     }
 
@@ -584,7 +584,7 @@ impl MinesweeperField {
                 if usize::from(self.uncovered_cells+self.mines) == self.area {
                     self.state = MinesweeperFieldState::Won;
                 }
-            } else if cell.print_zero { //maybe change back to cell.rel == 0 if it gets too ewwy
+            } else if cell.rel == 0 { //maybe change back to cell.rel == 0 if it gets too ewwy
                 if self.delta_mode {
                     self.uncover_rel_cell(p);
                 } //should still set print_zero when not in delta_mode to avoid graphical bugs when
