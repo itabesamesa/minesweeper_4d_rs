@@ -258,6 +258,11 @@ impl MinesweeperCell {
         self.rel += 1;
     }
 
+    fn dec_all(&mut self) {
+        self.abs -= 1;
+        self.rel -= 1;
+    }
+
     fn dec_rel(&mut self) {
         self.rel -= 1;
     }
@@ -474,6 +479,13 @@ impl MinesweeperField {
         return None;
     }
 
+    fn do_everywhere(&mut self, f: impl Fn(&mut MinesweeperField, Point)) {
+        for i in 0..self.area {
+            let p = self.field[i].coord;
+            f(self, p);
+        }
+    }
+
     fn do_in_neighbourhood(&mut self, p: Point, f: impl Fn(&mut MinesweeperField, Point)) {
         for w in -1..=1 {
             for z in -1..=1 {
@@ -509,15 +521,43 @@ impl MinesweeperField {
     }
 
     fn place_mines(&mut self) {
-        for _ in 0..self.mines {
-            loop {
-                let mut coord = Point::new();
-                coord.random_range(&mut self.rng, self.dim);
-                let cell: &mut MinesweeperCell = self.cell_at(coord).expect("cell coord is not in dim");
-                if !cell.is_bomb {
-                    cell.set_bomb(true);
-                    self.do_in_neighbourhood(coord, |s, p| s.cell_at(p).unwrap().inc_all());
-                    break;
+        if self.mines > (self.area as u16) {
+            //eprintln!("nooooo");
+            self.mines = self.area as u16; //should warn and break instead
+            //return;
+        }
+        if self.mines > (self.area as u16)/2 {
+            for i in 0..self.area {
+                let cell: &mut MinesweeperCell = &mut self.field[i];
+                cell.set_bomb(true);
+                let p = cell.coord;
+                self.do_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().inc_all());
+            }
+            if self.mines != (self.area as u16) {
+                for _ in self.mines..(self.area as u16) {
+                    loop {
+                        let mut coord = Point::new();
+                        coord.random_range(&mut self.rng, self.dim);
+                        let cell = self.cell_at(coord).unwrap();
+                        if cell.is_bomb {
+                            cell.set_bomb(false);
+                            self.do_in_neighbourhood(coord, |s, p| s.cell_at(p).unwrap().dec_all());
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            for _ in 0..self.mines {
+                loop {
+                    let mut coord = Point::new();
+                    coord.random_range(&mut self.rng, self.dim);
+                    let cell: &mut MinesweeperCell = self.cell_at(coord).unwrap();
+                    if !cell.is_bomb {
+                        cell.set_bomb(true);
+                        self.do_in_neighbourhood(coord, |s, p| s.cell_at(p).unwrap().inc_all());
+                        break;
+                    }
                 }
             }
         }
@@ -638,7 +678,7 @@ impl MinesweeperField {
                     }
                 }
                 self.uncovered_cells += 1;
-                if usize::from(self.uncovered_cells+self.mines) == self.area {
+                if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
                     self.state = MinesweeperFieldState::Won;
                 }
             } else if cell.rel == 0 { //maybe change back to cell.rel == 0 if it gets too ewwy
@@ -742,7 +782,7 @@ impl MinesweeperField {
     }
 
     fn mines_flagged_str(&self) -> String {
-        format!("{}", self.flagged_mines)
+        format!("{}/{}", self.flagged_mines, self.mines)
     }
 
     fn dim_str(&self) -> String {
@@ -1064,15 +1104,15 @@ impl App {
                             (_, KeyCode::Up | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
                             (_, KeyCode::Down | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
                             (_, KeyCode::Char('f')) => {
-                                self.game.field.find_free_cell();
                                 self.game.field.state = MinesweeperFieldState::Running;
+                                self.game.field.find_free_cell();
                                 self.game.field.started = Local::now();
                                 self.game.update_info_cells_uncovered();
                                 self.game.update_info_started();
                             },
                             (_, KeyCode::Char(' ')) => {
-                                self.game.field.uncover_cell(self.game.field.loc);
                                 self.game.field.state = MinesweeperFieldState::Running;
+                                self.game.field.uncover_cell(self.game.field.loc);
                                 self.game.field.started = Local::now();
                                 self.game.update_info_cells_uncovered();
                                 self.game.update_info_started();
@@ -1116,7 +1156,15 @@ impl App {
                                 self.game.field.toggle_flagged_chording(self.game.field.loc);
                                 self.game.update_info_mines_flagged();
                             },
-                            (_, KeyCode::Char('g')) => self.game.field.state = MinesweeperFieldState::GaveUp,
+                            (_, KeyCode::Char('g')) => {
+                                if !matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
+                                    self.game.field.state = MinesweeperFieldState::GaveUp;
+                                } else {
+                                    self.game.field.do_everywhere(|f, p| f.cell_at(p).unwrap().set_covered(false));
+                                    self.game.field.uncovered_cells = self.game.field.area as u16;
+                                    self.game.update_info_cells_uncovered();
+                                }
+                            },
                             _ => {}
                         }
                     },
