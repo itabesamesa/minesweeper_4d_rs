@@ -1,11 +1,14 @@
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    fmt,
+};
 use color_eyre::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}
 };
 use ratatui::{
     DefaultTerminal, Frame,
-    style::{Stylize, Style, Color},
+    style::{Stylize, Style, Color, Modifier},
     text::Line,
     widgets::{Widget, Paragraph, Wrap, Block},
     layout::{Constraint, Layout, Rect, Alignment, Flex},
@@ -60,6 +63,13 @@ impl MinesweeperChar {
             MinesweeperChar::Flag => "🏴"
         }
     }
+}
+
+#[derive(Debug, Default, Clone)]
+enum SettingsOptionTypes {
+    #[default] None,
+    Bool,
+    Int,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -128,15 +138,15 @@ impl Point {
 }
 
 #[derive(Clone, Debug, Default)]
-struct KeyValueList {
+struct KeyValueList<T> {//T must implement to_string() method!
     pos: usize,
     highlight: bool,
     title: String,
     constraint_len: u16,
-    array: Vec<[String; 2]>
+    array: Vec<(String, T)>
 }
 
-impl Widget for KeyValueList {
+impl<T: std::fmt::Display> Widget for KeyValueList<T> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let block = Block::bordered()
             .border_style(Style::default().fg(Color::White))
@@ -148,10 +158,9 @@ impl Widget for KeyValueList {
         ]).split(block.inner(area));
         block.render(area, buf);
         Paragraph::new(
-                self.array.iter().map(|x| 
-                    Line::raw(x[0].clone())
-                ).collect::<Vec<ratatui::prelude::Line>>()
-            )
+            self.array.iter().map(|x| {
+                Line::raw(x.0.clone())
+            }).collect::<Vec<ratatui::prelude::Line>>())
             .style(Style::new().white())
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
@@ -160,10 +169,9 @@ impl Widget for KeyValueList {
                 buf
             );
         Paragraph::new(
-                self.array.iter().map(|x| 
-                    Line::raw(x[1].clone())
-                ).collect::<Vec<ratatui::prelude::Line>>()
-            )
+            self.array.iter().map(|x| {
+                Line::raw(format!("{}", x.1))
+            }).collect::<Vec<ratatui::prelude::Line>>())
             .style(Style::new().white())
             .alignment(Alignment::Right)
             .wrap(Wrap { trim: true })
@@ -174,14 +182,65 @@ impl Widget for KeyValueList {
     }
 }
 
-impl KeyValueList {
-    fn new(title: String, array: Vec<[String; 2]>) -> KeyValueList {
+impl<T> KeyValueList<T> {
+    fn new(title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
         KeyValueList {
             pos: 0,
             highlight: true,
             title: title,
             constraint_len: 18,
             array: array
+        }
+    }
+
+    fn inc_pos(&mut self) {
+        self.pos = (self.pos+1)%self.array.len();
+    }
+
+    fn dec_pos(&mut self) {
+        self.pos = (self.array.len()+self.pos-1)%self.array.len();
+    }
+
+    fn get_tuple(&mut self) -> &mut (String, T) {
+        &mut self.array[self.pos]
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct SettingsOption {
+    enabled: bool,
+    option_type: SettingsOptionTypes,
+    value: u16
+}
+
+impl fmt::Display for SettingsOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.enabled {
+            match self.option_type {
+                SettingsOptionTypes::Bool => write!(f, "{}", if self.value == 0 {"Off"} else {"On"}),
+                SettingsOptionTypes::Int => write!(f, "{}", self.value),
+                _ => write!(f, ""),
+            }
+        } else {
+            write!(f, "")
+        }
+    }
+}
+
+impl SettingsOption {
+    fn inc(&mut self) {
+        match self.option_type {
+            SettingsOptionTypes::Bool => if self.value == 0 {self.value = 1;} else {self.value = 0;},
+            SettingsOptionTypes::Int => self.value += 1,
+            _ => {},
+        }
+    }
+
+    fn dec(&mut self) {
+        match self.option_type {
+            SettingsOptionTypes::Bool => if self.value == 0 {self.value = 1;} else {self.value = 0;},
+            SettingsOptionTypes::Int => if self.value != 0 {self.value -= 1;},
+            _ => {},
         }
     }
 }
@@ -806,15 +865,15 @@ impl MinesweeperField {
 struct MinesweeperGame {
     field: MinesweeperField,
     state: MinesweeperGameState,
-    info: KeyValueList,
-    controls: KeyValueList,
-    settings: KeyValueList,
     show_info: bool,
+    info: KeyValueList<String>,
+    controls: KeyValueList<String>,
+    settings: KeyValueList<SettingsOption>,
     info_panel_min_width: u16,
     info_panel_max_width: u16,
-    obfuscate_on_pause: bool,
+    /*obfuscate_on_pause: bool,
     disable_action_on_reveal: bool,
-    disable_movement_on_reveal: bool,
+    disable_movement_on_reveal: bool,*/
 }
 
 fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
@@ -903,81 +962,83 @@ impl MinesweeperGame {
     fn init(&mut self) {
         self.field.init();
         self.state = MinesweeperGameState::Running;
+        self.show_info = true;
         self.info = KeyValueList::new("Game Info".to_string(), vec![
-            ["Delta mode:".to_string(),      self.field.delta_mode_str()],
-            ["Seed:".to_string(),            self.field.seed_str()],
-            ["Cells uncovered:".to_string(), self.field.cells_uncovered_str()],
-            ["Mines Flagged:".to_string(),   self.field.mines_flagged_str()],
-            ["Dimensions:".to_string(),      self.field.dim_str()],
-            ["Location:".to_string(),        self.field.loc_str()],
-            ["Started at:".to_string(),      self.field.started_str()],
-            ["Game state:".to_string(),      self.field.state_str()]
+            ("Delta mode:".to_string(),      self.field.delta_mode_str()),
+            ("Seed:".to_string(),            self.field.seed_str()),
+            ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
+            ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
+            ("Dimensions:".to_string(),      self.field.dim_str()),
+            ("Location:".to_string(),        self.field.loc_str()),
+            ("Started at:".to_string(),      self.field.started_str()),
+            ("Game state:".to_string(),      self.field.state_str())
         ]);
         self.controls = KeyValueList::new("Game Controls".to_string(), vec![
-            ["Quit:".to_string(),                  "ctrl+C, q, ESC".to_string()],
-            ["Controls:".to_string(),              "c".to_string()],
-            ["Settings:".to_string(),              "o".to_string()],
-            ["Move left in x:".to_string(),        "Leftarrow, h".to_string()],
-            ["Move right in x:".to_string(),       "Rightarrow, l".to_string()],
-            ["Move up in y:".to_string(),          "Uparrow, k".to_string()],
-            ["Move down in y:".to_string(),        "Downarrow, j".to_string()],
-            ["Move left in z:".to_string(),        "a, ctrl+h".to_string()],
-            ["Move right in z:".to_string(),       "d, ctrl+l".to_string()],
-            ["Move up in w:".to_string(),          "w, ctrl+k".to_string()],
-            ["Move down in w:".to_string(),        "s, ctrl+j".to_string()],
-            ["New game:".to_string(),              "n".to_string()],
-            ["Find free cell:".to_string(),        "f".to_string()],
-            ["Uncover cell:".to_string(),          "SPACE".to_string()],
-            ["Giive up/reveal field:".to_string(), "g".to_string()],
-            ["Flag cell:".to_string(),             "m, e".to_string()],
-            ["Flag cell chording:".to_string(),    "M, E".to_string()],
-            ["Pause game:".to_string(),            "p".to_string()],
-            ["Toggle info:".to_string(),           "i".to_string()]
+            ("Quit:".to_string(),                  "ctrl+C, q, ESC".to_string()),
+            ("Controls:".to_string(),              "c".to_string()),
+            ("Settings:".to_string(),              "o".to_string()),
+            ("Move left in x:".to_string(),        "Leftarrow, h".to_string()),
+            ("Move right in x:".to_string(),       "Rightarrow, l".to_string()),
+            ("Move up in y:".to_string(),          "Uparrow, k".to_string()),
+            ("Move down in y:".to_string(),        "Downarrow, j".to_string()),
+            ("Move left in z:".to_string(),        "a, ctrl+h".to_string()),
+            ("Move right in z:".to_string(),       "d, ctrl+l".to_string()),
+            ("Move up in w:".to_string(),          "w, ctrl+k".to_string()),
+            ("Move down in w:".to_string(),        "s, ctrl+j".to_string()),
+            ("New game:".to_string(),              "n".to_string()),
+            ("Find free cell:".to_string(),        "f".to_string()),
+            ("Uncover cell:".to_string(),          "SPACE".to_string()),
+            ("Giive up/reveal field:".to_string(), "g".to_string()),
+            ("Flag cell:".to_string(),             "m, e".to_string()),
+            ("Flag cell chording:".to_string(),    "M, E".to_string()),
+            ("Pause game:".to_string(),            "p".to_string()),
+            ("Toggle info:".to_string(),           "i".to_string())
         ]);
-        //maybe make a seperate type for this like in minesweeper_4d_c
-        self.settings = KeyValueList::new("Game Settings".to_string(), vec![
-            ["Size".to_string(), "".to_string()],
-            ["   x:".to_string(), "".to_string()],
-            ["   y:".to_string(), "".to_string()],
-            ["   z:".to_string(), "".to_string()],
-            ["   w:".to_string(), "".to_string()],
-            ["Use random seed:".to_string(), "".to_string()],
-            ["   Seed:".to_string(), "".to_string()],
-            ["Mines:".to_string(), "".to_string()],
-            ["Show info:".to_string(), "".to_string()],
-            ["Delta mode:".to_string(), "".to_string()],
-        ]);
-        self.show_info = true;
+        self.settings = KeyValueList {
+            pos: 0,
+            highlight: true,
+            title: "Game Settings".to_string(),
+            constraint_len: 18, //may be a magic number :3
+            array: vec![
+                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
+                ("   x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
+                ("   y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
+                ("   z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
+                ("   w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
+                ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
+                ("   Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
+                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
+                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
+                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
+            ]
+        };
         self.info_panel_min_width = 25;
         self.info_panel_max_width = 50;
-        self.obfuscate_on_pause = false;
-        self.disable_action_on_reveal = false;
-        self.disable_movement_on_reveal = false;
     }
 
     fn toggle_delta_mode(&mut self) {
         self.field.delta_mode = !self.field.delta_mode;
-        self.info.array[0][1] = self.field.delta_mode_str();
+        self.info.array[0].1 = self.field.delta_mode_str();
     }
 
     fn update_info_cells_uncovered(&mut self) {
-        self.info.array[2][1] = self.field.cells_uncovered_str();
+        self.info.array[2].1 = self.field.cells_uncovered_str();
     }
 
     fn update_info_mines_flagged(&mut self) {
-        self.info.array[3][1] = self.field.mines_flagged_str();
+        self.info.array[3].1 = self.field.mines_flagged_str();
     }
 
     fn update_info_loc(&mut self) {
-        self.info.array[5][1] = self.field.loc_str();
+        self.info.array[5].1 = self.field.loc_str();
     }
 
     fn update_info_started(&mut self) {
-        self.info.array[6][1] = self.field.started_str();
+        self.info.array[6].1 = self.field.started_str();
     }
 
     fn update_info_state(&mut self) {
-        self.info.array[7][1] = self.field.state_str();
+        self.info.array[7].1 = self.field.state_str();
     }
 
     fn move_in_field(&mut self, f: impl Fn(&mut MinesweeperField)) {
@@ -987,14 +1048,14 @@ impl MinesweeperGame {
 
     fn regenerate_field(&mut self) {
         self.field.regenerate();
-        self.info.array[0][1] = self.field.delta_mode_str();
-        self.info.array[1][1] = self.field.seed_str();
-        self.info.array[2][1] = self.field.cells_uncovered_str();
-        self.info.array[3][1] = self.field.mines_flagged_str();
-        self.info.array[4][1] = self.field.dim_str();
-        self.info.array[5][1] = self.field.loc_str();
-        self.info.array[6][1] = self.field.started_str();
-        self.info.array[7][1] = self.field.state_str();
+        self.info.array[0].1 = self.field.delta_mode_str();
+        self.info.array[1].1 = self.field.seed_str();
+        self.info.array[2].1 = self.field.cells_uncovered_str();
+        self.info.array[3].1 = self.field.mines_flagged_str();
+        self.info.array[4].1 = self.field.dim_str();
+        self.info.array[5].1 = self.field.loc_str();
+        self.info.array[6].1 = self.field.started_str();
+        self.info.array[7].1 = self.field.state_str();
     }
 }
 
@@ -1044,11 +1105,12 @@ impl App {
             .centered();
         let mut area = frame.area();
         area.y += 1;
-        area.height -= 2;
+        area.height -= 1;
         frame.render_widget(
             title,
             frame.area()
         );
+        self.check_size(area.width, area.height, self.game.state.clone());
         frame.render_widget(
             self.game.clone(),
             area,
@@ -1195,6 +1257,14 @@ impl App {
                 self.game.update_info_state(); //maybe change this, so it doesn't get called too
                                                //often
             },
+            MinesweeperGameState::Controls => {
+                match (key.modifiers, key.code) {
+                    (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c'))
+                    | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
+                    (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                    _ => {}
+                }
+            },
             MinesweeperGameState::Settings => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
@@ -1205,14 +1275,16 @@ impl App {
                         self.game.field.regenerate();
                         self.game.state = MinesweeperGameState::Running;
                     },
-                    _ => {}
-                }
-            },
-            MinesweeperGameState::Controls => {
-                match (key.modifiers, key.code) {
-                    (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c'))
-                    | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
-                    (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                    (_, KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('a')) => {
+                        let op = self.game.settings.get_tuple();
+                        op.1.dec();
+                    },
+                    (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('d')) => {
+                        let op = self.game.settings.get_tuple();
+                        op.1.inc();
+                    },
+                    (_, KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('w')) => self.game.settings.dec_pos(),
+                    (_, KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('s')) => self.game.settings.inc_pos(),
                     _ => {}
                 }
             },
