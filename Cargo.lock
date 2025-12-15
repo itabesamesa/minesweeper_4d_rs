@@ -440,7 +440,6 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "rand",
- "rand_chacha",
  "ratatui",
 ]
 
