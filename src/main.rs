@@ -121,6 +121,7 @@ impl Point {
 
     fn to_1d(self, dim: Point) -> usize {
         (((self.w * dim.z + self.z) * dim.y + self.y) * dim.x + self.x).try_into().unwrap()
+        //(((self.x * dim.y + self.y) * dim.z + self.z) * dim.w + self.w).try_into().unwrap()
     }
 
     fn calc_area(self) -> usize {
@@ -158,8 +159,13 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
         ]).split(block.inner(area));
         block.render(area, buf);
         Paragraph::new(
-            self.array.iter().map(|x| {
-                Line::raw(x.0.clone())
+            self.array.iter().enumerate().map(|x| {// i don't like this, but too much of a rust
+                                                   // noob to fix...
+                if self.highlight && x.0 == self.pos {
+                    Line::raw(x.1.0.clone()).style(Modifier::UNDERLINED)
+                } else {
+                    Line::raw(x.1.0.clone())
+                }
             }).collect::<Vec<ratatui::prelude::Line>>())
             .style(Style::new().white())
             .alignment(Alignment::Left)
@@ -169,8 +175,13 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
                 buf
             );
         Paragraph::new(
-            self.array.iter().map(|x| {
-                Line::raw(format!("{}", x.1))
+            self.array.iter().enumerate().map(|x| {// i don't like this, but too much of a rust
+                                                   // noob to fix...
+                if self.highlight && x.0 == self.pos {
+                    Line::raw(format!("{}", x.1.1)).style(Modifier::UNDERLINED)
+                } else {
+                    Line::raw(format!("{}", x.1.1))
+                }
             }).collect::<Vec<ratatui::prelude::Line>>())
             .style(Style::new().white())
             .alignment(Alignment::Right)
@@ -228,9 +239,27 @@ impl fmt::Display for SettingsOption {
 }
 
 impl SettingsOption {
+    fn set_bool(&mut self, v: bool) {
+        if matches!(self.option_type, SettingsOptionTypes::Bool) {
+            if v {
+                self.value = 1;
+            } else {
+                self.value = 0;
+            }
+        }
+    }
+
+    fn toggle_bool(&mut self) {//no ! cause 000 -> 111
+        if self.value == 0 {
+            self.value = 1;
+        } else {
+            self.value = 0;
+        }
+    }
+
     fn inc(&mut self) {
         match self.option_type {
-            SettingsOptionTypes::Bool => if self.value == 0 {self.value = 1;} else {self.value = 0;},
+            SettingsOptionTypes::Bool => self.toggle_bool(),
             SettingsOptionTypes::Int => self.value += 1,
             _ => {},
         }
@@ -238,8 +267,25 @@ impl SettingsOption {
 
     fn dec(&mut self) {
         match self.option_type {
-            SettingsOptionTypes::Bool => if self.value == 0 {self.value = 1;} else {self.value = 0;},
+            SettingsOptionTypes::Bool => self.toggle_bool(),
             SettingsOptionTypes::Int => if self.value != 0 {self.value -= 1;},
+            _ => {},
+        }
+    }
+
+    fn append(&mut self, v: u16) {
+        match self.option_type {
+            SettingsOptionTypes::Bool => if v != 0 {self.value = 1;} else {self.value = 0;},
+            SettingsOptionTypes::Int => self.value = self.value.wrapping_mul(10).wrapping_add(v),
+            //could do better, but too lazy
+            _ => {},
+        }
+    }
+ 
+    fn del(&mut self) {
+        match self.option_type {
+            SettingsOptionTypes::Bool => self.toggle_bool(),
+            SettingsOptionTypes::Int => self.value = self.value/10,
             _ => {},
         }
     }
@@ -274,10 +320,12 @@ impl MinesweeperCell {
     }
 
     fn render_rel(self, area: Rect, buf: &mut Buffer) {
+        //eprintln!("{:?}", self.get_rel_string());
         buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
     }
 
     fn render_abs(self, area: Rect, buf: &mut Buffer) {
+        //eprintln!("{:?}", self.get_abs_string());
         buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
     }
 
@@ -397,12 +445,9 @@ impl MinesweeperCell {
 struct MinesweeperField {
     state: MinesweeperFieldState,
     dim: Point,
-    new_dim: Point,
     rng: ThreadRng,
     seed: u64,
-    new_seed: u64,
     mines: u16,
-    new_mines: u16,
     loc: Point,
     area: usize,
     uncovered_cells: u16,
@@ -421,7 +466,7 @@ impl Widget for MinesweeperField {
         let w_vertical = Layout::vertical(w_constraints).spacing(1);
 
         let grid_rows = w_vertical.split(area);
-        let grids = grid_rows.iter().flat_map(|&grid_row| z_horizontal.split(grid_row).to_vec());
+        let grids: Vec<Rect> = grid_rows.iter().flat_map(|&grid_row| z_horizontal.split(grid_row).to_vec()).collect();
 
         if matches!(self.state, MinesweeperFieldState::Paused) {
             Block::new()
@@ -429,23 +474,24 @@ impl Widget for MinesweeperField {
                 .title_top(Line::from(self.state.as_str()).centered().fg(Color::White))
                 .render(area, buf);
         } else {
-            for (i, grid) in grids.enumerate() {
-                let w = (i as i16)/self.dim.w;
-                let z = (i as i16)%self.dim.z;
-                let x_constraints = (0..self.dim.x).map(|_| Constraint::Length(2));
-                let y_constraints = (0..self.dim.y).map(|_| Constraint::Length(1));
-                let x_horizontal = Layout::horizontal(x_constraints).spacing(0);
-                let y_vertical = Layout::vertical(y_constraints).spacing(0);
+            for w in 0..self.dim.w {
+                for z in 0..self.dim.z {
+                    let x_constraints = (0..self.dim.x).map(|_| Constraint::Length(2));
+                    let y_constraints = (0..self.dim.y).map(|_| Constraint::Length(1));
+                    let x_horizontal = Layout::horizontal(x_constraints).spacing(0);
+                    let y_vertical = Layout::vertical(y_constraints).spacing(0);
 
-                let rows = y_vertical.split(grid);
-                let cells = rows.iter().flat_map(|&row| x_horizontal.split(row).to_vec());
-                for (j, cell_area) in cells.enumerate() {
-                    let y = (j as i16)/self.dim.y;
-                    let x = (j as i16)%self.dim.x;
-                    if self.delta_mode {
-                        self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_rel(cell_area, buf);
-                    } else {
-                        self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_abs(cell_area, buf);
+                    let rows = y_vertical.split(grids[(w*self.dim.z+z) as usize]);
+                    let cells: Vec<Rect> = rows.iter().flat_map(|&row| x_horizontal.split(row).to_vec()).collect();
+                    for y in 0..self.dim.y {
+                        for x in 0..self.dim.x {
+                            let cell_area = cells[(y*self.dim.x+x) as usize];
+                            if self.delta_mode {
+                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_rel(cell_area, buf);
+                            } else {
+                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_abs(cell_area, buf);
+                            }
+                        }
                     }
                 }
             }
@@ -475,12 +521,9 @@ impl MinesweeperField {
     fn init(&mut self) {
         self.state = MinesweeperFieldState::New;
         self.dim = Point {x: 4, y: 4, z: 4, w: 4};
-        self.new_dim = self.dim;
         self.seed = 0;
-        self.new_seed = self.seed;
         self.rng = rand::rng();
         self.mines = 20;
-        self.new_mines = self.mines;
         self.loc = Point::new();
         self.uncovered_cells = 0;
         self.flagged_mines = 0;
@@ -506,14 +549,6 @@ impl MinesweeperField {
                 }
             }
         }
-    }
-
-    fn apply_new(&mut self) {
-        self.dim = self.new_dim;
-        self.area = self.dim.calc_area();
-        self.seed = self.new_seed;
-        //self.rng = rand::rng();
-        self.mines = self.new_mines;
     }
 
     fn regenerate(&mut self) {
@@ -821,7 +856,7 @@ impl MinesweeperField {
     }
 
     fn get_display_width(&self) -> u16 {
-        ((self.dim.y+1)*2*self.dim.w-1).try_into().unwrap()
+        ((self.dim.x+1)*2*self.dim.z-1).try_into().unwrap()
     }
 
     fn get_display_height(&self) -> u16 {
@@ -1057,6 +1092,25 @@ impl MinesweeperGame {
         self.info.array[6].1 = self.field.started_str();
         self.info.array[7].1 = self.field.state_str();
     }
+
+    fn apply_settings(&mut self) {
+        self.field.dim = Point {
+            x: self.settings.array[1].1.value as i16,
+            y: self.settings.array[2].1.value as i16,
+            z: self.settings.array[3].1.value as i16,
+            w: self.settings.array[4].1.value as i16,
+        };
+        self.field.area = self.field.dim.calc_area();
+        if self.settings.array[5].1.value == 1 {
+            //self.field.rng = ;
+            eprintln!("do random seed");
+        } else {
+            eprintln!("no!");
+        }
+        self.field.mines = self.settings.array[7].1.value;
+        self.show_info = if self.settings.array[8].1.value == 1 {true} else {false};
+        self.field.delta_mode = if self.settings.array[9].1.value == 1 {true} else {false};
+    }
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -1270,9 +1324,9 @@ impl App {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
                     (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
-                    (_, KeyCode::Char('o')) => {
-                        self.game.field.apply_new();
-                        self.game.field.regenerate();
+                    (_, KeyCode::Char('o') | KeyCode::Enter) => {
+                        self.game.apply_settings();
+                        self.game.regenerate_field();
                         self.game.state = MinesweeperGameState::Running;
                     },
                     (_, KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('a')) => {
@@ -1285,6 +1339,20 @@ impl App {
                     },
                     (_, KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('w')) => self.game.settings.dec_pos(),
                     (_, KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('s')) => self.game.settings.inc_pos(),
+                    (_, KeyCode::Char('0')) => self.game.settings.get_tuple().1.append(0),
+                    (_, KeyCode::Char('1')) => self.game.settings.get_tuple().1.append(1),
+                    (_, KeyCode::Char('2')) => self.game.settings.get_tuple().1.append(2),
+                    (_, KeyCode::Char('3')) => self.game.settings.get_tuple().1.append(3),
+                    (_, KeyCode::Char('4')) => self.game.settings.get_tuple().1.append(4),
+                    (_, KeyCode::Char('5')) => self.game.settings.get_tuple().1.append(5),
+                    (_, KeyCode::Char('6')) => self.game.settings.get_tuple().1.append(6),
+                    (_, KeyCode::Char('7')) => self.game.settings.get_tuple().1.append(7),
+                    (_, KeyCode::Char('8')) => self.game.settings.get_tuple().1.append(8),
+                    (_, KeyCode::Char('9')) => self.game.settings.get_tuple().1.append(9),
+                    //idk if i could've done that better...
+                    (_, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('t') | KeyCode::Char('T')) => self.game.settings.get_tuple().1.set_bool(true),
+                    (_, KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('f') | KeyCode::Char('F')) => self.game.settings.get_tuple().1.set_bool(false),
+                    (_, KeyCode::Delete | KeyCode::Backspace) => self.game.settings.get_tuple().1.del(),
                     _ => {}
                 }
             },
