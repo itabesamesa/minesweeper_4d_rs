@@ -14,7 +14,10 @@ use ratatui::{
     layout::{Constraint, Layout, Rect, Alignment, Flex},
     prelude::Buffer,
 };
-use rand::{Rng, SeedableRng, rngs::ThreadRng};
+use rand::{
+    Rng, //SeedableRng,
+    rngs::ThreadRng
+};
 use chrono::{DateTime, Local};
 //use rand_chacha::ChaCha20Rng;
 //ChaCha20Rng doesn't implement Default, gonna have to find somthing else
@@ -195,12 +198,13 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
 }
 
 impl<T> KeyValueList<T> {
-    fn new(title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
+    fn new(highlight: bool, title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
+        let cl = array.iter().reduce(|a, b| if a.0.len() < b.0.len() {b} else {a}).unwrap().0.len() as u16;
         KeyValueList {
             pos: 0,
-            highlight: true,
+            highlight: highlight,
             title: title,
-            constraint_len: 18,
+            constraint_len: cl,
             array: array
         }
     }
@@ -321,12 +325,10 @@ impl MinesweeperCell {
     }
 
     fn render_rel(self, area: Rect, buf: &mut Buffer) {
-        //eprintln!("{:?}", self.get_rel_string());
         buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
     }
 
     fn render_abs(self, area: Rect, buf: &mut Buffer) {
-        //eprintln!("{:?}", self.get_abs_string());
         buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
     }
 
@@ -617,9 +619,7 @@ impl MinesweeperField {
 
     fn place_mines(&mut self) {
         if self.mines > (self.area as u16) {
-            //eprintln!("nooooo");
             self.mines = self.area as u16; //should warn and break instead
-            //return;
         }
         if self.mines > (self.area as u16)/2 {
             for i in 0..self.area {
@@ -725,13 +725,10 @@ impl MinesweeperField {
     fn uncover_rel_cell(&mut self, p: Point) {
         self.do_in_neighbourhood(p, |s, p| {
             let cell = s.cell_at(p).unwrap();
-            //if !cell.is_flagged {
-                if cell.is_covered || cell.print_zero {
-                    //if !cell.is_flagged {cell.set_covered(false);}
-                    cell.set_print_zero(false);
-                    s.uncover_cell(p);
-                }
-            //}
+            if cell.is_covered || cell.print_zero {
+                cell.set_print_zero(false);
+                s.uncover_cell(p);
+            }
         });
     }
 
@@ -776,7 +773,7 @@ impl MinesweeperField {
                 if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
                     self.state = MinesweeperFieldState::Won;
                 }
-            } else if cell.rel == 0 { //maybe change back to cell.rel == 0 if it gets too ewwy
+            } else if cell.rel == 0 {
                 if self.delta_mode {
                     self.uncover_rel_cell(p);
                     //should still set print_zero when not in delta_mode to avoid graphical bugs when
@@ -805,25 +802,12 @@ impl MinesweeperField {
             self.do_in_neighbourhood(p, |s, p| {
                 let cell = s.cell_at(p).unwrap();
                 cell.dec_rel();
-                /*if cell.rel == 0 {
-                    s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
-                        let cell = s.cell_at(p).unwrap();
-                        cell.is_covered && !cell.is_flagged
-                    })
-                }*/
             });
             self.flagged_mines += 1;
         } else {
-            //self.do_in_neighbourhood(p, |s, p| s.cell_at(p).unwrap().inc_rel());
             self.do_in_neighbourhood(p, |s, p| {
                 let cell = s.cell_at(p).unwrap();
                 cell.inc_rel();
-                /*if cell.rel == 0 {
-                    s.cell_at(p).unwrap().print_zero = s.check_in_neighbourhood(p, |s, p| {
-                        let cell = s.cell_at(p).unwrap();
-                        cell.is_covered && !cell.is_flagged
-                    })
-                }*/
             });
             self.flagged_mines -= 1;
         }
@@ -868,9 +852,9 @@ impl MinesweeperField {
         (if self.delta_mode {"On"} else {"Off"}).to_string()
     }
 
-    fn seed_str(&self) -> String {
+    /*fn seed_str(&self) -> String {
         format!("{}", self.seed)
-    }
+    }*/
 
     fn cells_uncovered_str(&self) -> String {
         format!("{}/{}", self.uncovered_cells, (self.area as u16)-self.mines)
@@ -920,12 +904,12 @@ fn centered_rect(area: Rect, width: u16, height: u16) -> Rect {
     area
 }
 
-fn center_horizontal(area: Rect, width: u16) -> Rect {
+/*fn center_horizontal(area: Rect, width: u16) -> Rect {
     let [area] = Layout::horizontal([Constraint::Length(width)])
         .flex(Flex::Center)
         .areas(area);
     area
-}
+}*/
 
 fn center_vertical(area: Rect, height: u16) -> Rect {
     let [area] = Layout::vertical([Constraint::Length(height)])
@@ -942,14 +926,6 @@ impl Widget for MinesweeperGame {
                     Constraint::Length(self.field.get_display_width().try_into().unwrap()),
                     Constraint::Max(if self.show_info {self.info_panel_max_width} else {0})
                 ].into_iter()).flex(Flex::Center).split(area);
-                //let vertical = min(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap(), 5);
-                /*let [field_area] = Layout::vertical([
-                        ((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap()
-                    ]).flex(Flex::Center).areas(layout[0]);*/
-                /*let fieldVertical = Layout::vertical([
-                    Constraint::Length(((self.field.dim.y+1)*2*self.field.dim.w-1).try_into().unwrap())
-                ]).flex(Flex::Center).areas(layout[0]);
-                eprintln!("{:?}", fieldVertical);*/
                 let field_area = center_vertical(
                     layout[0],
                     self.field.get_display_height().try_into().unwrap()
@@ -961,14 +937,17 @@ impl Widget for MinesweeperGame {
                 );
 
                 if self.show_info {
-                    self.info.render(center_vertical(layout[1], 10), buf);
+                    let height = self.info.array.len()+2;
+                    self.info.render(center_vertical(layout[1], height.try_into().unwrap()), buf);
                 }
             },
             MinesweeperGameState::Controls => {
-                self.controls.render(area, buf);
+                let height = self.controls.array.len()+2;
+                self.controls.render(centered_rect(area, 50, height.try_into().unwrap()), buf);
             },
             MinesweeperGameState::Settings => {
-                self.settings.render(area, buf);
+                let height = self.settings.array.len()+2;
+                self.settings.render(centered_rect(area, 50, height.try_into().unwrap()), buf);
             },
             MinesweeperGameState::TooSmall => {
                 let field_width = self.field.get_display_width()+2;
@@ -999,9 +978,9 @@ impl MinesweeperGame {
         self.field.init();
         self.state = MinesweeperGameState::Running;
         self.show_info = true;
-        self.info = KeyValueList::new("Game Info".to_string(), vec![
+        self.info = KeyValueList::new(false, "Game Info".to_string(), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
-            ("Seed:".to_string(),            self.field.seed_str()),
+            //("Seed:".to_string(),            self.field.seed_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
             ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
             ("Dimensions:".to_string(),      self.field.dim_str()),
@@ -1009,45 +988,39 @@ impl MinesweeperGame {
             ("Started at:".to_string(),      self.field.started_str()),
             ("Game state:".to_string(),      self.field.state_str())
         ]);
-        self.controls = KeyValueList::new("Game Controls".to_string(), vec![
-            ("Quit:".to_string(),                  "ctrl+C, q, ESC".to_string()),
-            ("Controls:".to_string(),              "c".to_string()),
-            ("Settings:".to_string(),              "o".to_string()),
-            ("Move left in x:".to_string(),        "Leftarrow, h".to_string()),
-            ("Move right in x:".to_string(),       "Rightarrow, l".to_string()),
-            ("Move up in y:".to_string(),          "Uparrow, k".to_string()),
-            ("Move down in y:".to_string(),        "Downarrow, j".to_string()),
-            ("Move left in z:".to_string(),        "a, ctrl+h".to_string()),
-            ("Move right in z:".to_string(),       "d, ctrl+l".to_string()),
-            ("Move up in w:".to_string(),          "w, ctrl+k".to_string()),
-            ("Move down in w:".to_string(),        "s, ctrl+j".to_string()),
-            ("New game:".to_string(),              "n".to_string()),
-            ("Find free cell:".to_string(),        "f".to_string()),
-            ("Uncover cell:".to_string(),          "SPACE".to_string()),
-            ("Giive up/reveal field:".to_string(), "g".to_string()),
-            ("Flag cell:".to_string(),             "m, e".to_string()),
-            ("Flag cell chording:".to_string(),    "M, E".to_string()),
-            ("Pause game:".to_string(),            "p".to_string()),
-            ("Toggle info:".to_string(),           "i".to_string())
+        self.controls = KeyValueList::new(false, "Game Controls".to_string(), vec![
+            ("Quit:".to_string(),                 "ctrl+C, q, ESC".to_string()),
+            ("Controls:".to_string(),             "c".to_string()),
+            ("Settings:".to_string(),             "o".to_string()),
+            ("Move left in x:".to_string(),       "Leftarrow, h".to_string()),
+            ("Move right in x:".to_string(),      "Rightarrow, l".to_string()),
+            ("Move up in y:".to_string(),         "Uparrow, k".to_string()),
+            ("Move down in y:".to_string(),       "Downarrow, j".to_string()),
+            ("Move left in z:".to_string(),       "a, ctrl+h".to_string()),
+            ("Move right in z:".to_string(),      "d, ctrl+l".to_string()),
+            ("Move up in w:".to_string(),         "w, ctrl+k".to_string()),
+            ("Move down in w:".to_string(),       "s, ctrl+j".to_string()),
+            ("New game:".to_string(),             "n".to_string()),
+            ("Find free cell:".to_string(),       "f".to_string()),
+            ("Uncover cell:".to_string(),         "SPACE".to_string()),
+            ("Give up/reveal field:".to_string(), "g".to_string()),
+            ("Flag cell:".to_string(),            "m, e".to_string()),
+            ("Flag cell chording:".to_string(),   "M, E".to_string()),
+            ("Pause game:".to_string(),           "p".to_string()),
+            ("Toggle info:".to_string(),          "i".to_string())
         ]);
-        self.settings = KeyValueList {
-            pos: 0,
-            highlight: true,
-            title: "Game Settings".to_string(),
-            constraint_len: 18, //may be a magic number :3
-            array: vec![
-                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
-                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
-                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
-                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
-                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
-                ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
-                ("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
-                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
-                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
-                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
-            ]
-        };
+        self.settings = KeyValueList::new(true, "Game Settings".to_string(), vec![
+            ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
+            ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
+            ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
+            ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
+            ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
+            ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
+            ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
+            ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
+            //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
+            //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
+        ]);
         self.info_panel_min_width = 25;
         self.info_panel_max_width = 50;
     }
@@ -1058,23 +1031,23 @@ impl MinesweeperGame {
     }
 
     fn update_info_cells_uncovered(&mut self) {
-        self.info.array[2].1 = self.field.cells_uncovered_str();
+        self.info.array[1].1 = self.field.cells_uncovered_str();
     }
 
     fn update_info_mines_flagged(&mut self) {
-        self.info.array[3].1 = self.field.mines_flagged_str();
+        self.info.array[2].1 = self.field.mines_flagged_str();
     }
 
     fn update_info_loc(&mut self) {
-        self.info.array[5].1 = self.field.loc_str();
+        self.info.array[4].1 = self.field.loc_str();
     }
 
     fn update_info_started(&mut self) {
-        self.info.array[6].1 = self.field.started_str();
+        self.info.array[5].1 = self.field.started_str();
     }
 
     fn update_info_state(&mut self) {
-        self.info.array[7].1 = self.field.state_str();
+        self.info.array[6].1 = self.field.state_str();
     }
 
     fn move_in_field(&mut self, f: impl Fn(&mut MinesweeperField)) {
@@ -1085,13 +1058,13 @@ impl MinesweeperGame {
     fn regenerate_field(&mut self) {
         self.field.regenerate();
         self.info.array[0].1 = self.field.delta_mode_str();
-        self.info.array[1].1 = self.field.seed_str();
-        self.info.array[2].1 = self.field.cells_uncovered_str();
-        self.info.array[3].1 = self.field.mines_flagged_str();
-        self.info.array[4].1 = self.field.dim_str();
-        self.info.array[5].1 = self.field.loc_str();
-        self.info.array[6].1 = self.field.started_str();
-        self.info.array[7].1 = self.field.state_str();
+        //self.info.array[1].1 = self.field.seed_str();
+        self.info.array[1].1 = self.field.cells_uncovered_str();
+        self.info.array[2].1 = self.field.mines_flagged_str();
+        self.info.array[3].1 = self.field.dim_str();
+        self.info.array[4].1 = self.field.loc_str();
+        self.info.array[5].1 = self.field.started_str();
+        self.info.array[6].1 = self.field.state_str();
     }
 
     fn apply_settings(&mut self) {
@@ -1102,15 +1075,15 @@ impl MinesweeperGame {
             w: self.settings.array[4].1.value as i16,
         };
         self.field.area = self.field.dim.calc_area();
-        if self.settings.array[5].1.value == 1 {
+        self.field.mines = self.settings.array[5].1.value;
+        self.show_info = if self.settings.array[6].1.value == 1 {true} else {false};
+        self.field.delta_mode = if self.settings.array[7].1.value == 1 {true} else {false};
+        /*if self.settings.array[8].1.value == 1 {
             //self.field.rng = ;
             eprintln!("do random seed");
         } else {
             eprintln!("no!");
-        }
-        self.field.mines = self.settings.array[7].1.value;
-        self.show_info = if self.settings.array[8].1.value == 1 {true} else {false};
-        self.field.delta_mode = if self.settings.array[9].1.value == 1 {true} else {false};
+        }*/
     }
 }
 
