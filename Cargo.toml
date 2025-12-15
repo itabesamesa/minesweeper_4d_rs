@@ -6,6 +6,11 @@ authors = ["itabesamesa <laura418@proton.me>"]
 license = "MIT"
 edition = "2024"
 
+repository = "https://github.com/itabesamesa/minesweeper_4d_rs"
+readme = "./README.md"
+keywords = ["game", "minesweeper", "4D", "multidimensional"]
+categories = ["games", "command-line-utilities"]
+
 [dependencies]
 crossterm = "0.28.1"
 ratatui = "0.29.0"
