@@ -37,6 +37,12 @@ You have to find all the mines in a 4 dimensional field. The pink cursor highlig
 
 ## Compiling and running
 
+```
+cargo install minesweeper_4d
+```
+
+or
+
 Build:
 
 ```
