@@ -70,4 +70,5 @@ This project is licensed under the MIT license ([LICENSE] or <http://opensource.
 ## Special thanks
 
 To Julian Schlüntz for creating [4D Minesweeper](https://store.steampowered.com/app/787980/4D_Minesweeper/) on steam, the original inspiration for this project
+
 To [Ratatui](https://github.com/walternagl-student) for sparing from implementing a TUI library from scratch again...
