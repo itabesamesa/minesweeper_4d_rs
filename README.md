@@ -37,19 +37,25 @@ You have to find all the mines in a 4 dimensional field. The pink cursor highlig
 
 ## Compiling and running
 
+Build:
+
+```
+cargo build --release
+```
+
 Run:
 
 ```
-cargo build
+./target/release/minesweeper_4d
 ```
 
 ## TODO
 
 - [x] Make swapping to and from delta_mode possible
 - [x] Fix 0 showing around newly flagged mines
-- [ ] Add timer
+- [ ] Add timer _idk, kinda too lazy..._
 - [x] Fix win condition
-- [ ] Make random seedable
+- [ ] ~~Make random seedable~~
 - [x] Add chording
 - [x] Editable settings
 
