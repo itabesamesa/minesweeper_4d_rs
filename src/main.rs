@@ -1,6 +1,8 @@
 use std::{
     cmp::Ordering,
     fmt,
+    env,
+    str,
 };
 use color_eyre::Result;
 use crossterm::{
@@ -521,16 +523,16 @@ impl Widget for MinesweeperField {
 }
 
 impl MinesweeperField {
-    fn init(&mut self) {
+    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool) {
         self.state = MinesweeperFieldState::New;
-        self.dim = Point {x: 4, y: 4, z: 4, w: 4};
+        self.dim = dim;
         self.seed = 0;
         self.rng = rand::rng();
-        self.mines = 20;
+        self.mines = mines;
         self.loc = Point::new();
         self.uncovered_cells = 0;
         self.flagged_mines = 0;
-        self.delta_mode = true;
+        self.delta_mode = delta_mode;
         self.area = self.dim.calc_area();
         self.started = Local::now();
         self.ended = self.started;
@@ -974,10 +976,10 @@ impl Widget for MinesweeperGame {
 }
 
 impl MinesweeperGame {
-    fn init(&mut self) {
-        self.field.init();
+    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool) {
+        self.field.init(dim, mines, delta_mode);
         self.state = MinesweeperGameState::Running;
-        self.show_info = true;
+        self.show_info = show_info;
         self.info = KeyValueList::new(false, "Game Info".to_string(), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
             //("Seed:".to_string(),            self.field.seed_str()),
@@ -988,7 +990,25 @@ impl MinesweeperGame {
             ("Started at:".to_string(),      self.field.started_str()),
             ("Game state:".to_string(),      self.field.state_str())
         ]);
-        self.controls = KeyValueList::new(false, "Game Controls".to_string(), vec![
+        self.controls = MinesweeperGame::get_controls();
+        self.settings = KeyValueList::new(true, "Game Settings".to_string(), vec![
+            ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
+            ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
+            ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
+            ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
+            ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
+            ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
+            ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
+            ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
+            //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
+            //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
+        ]);
+        self.info_panel_min_width = 25;
+        self.info_panel_max_width = 50;
+    }
+
+    fn get_controls() -> KeyValueList<String> {
+        KeyValueList::new(false, "Game Controls".to_string(), vec![
             ("Quit:".to_string(),                 "ctrl+C, q, ESC".to_string()),
             ("Controls:".to_string(),             "c".to_string()),
             ("Settings:".to_string(),             "o".to_string()),
@@ -1007,22 +1027,9 @@ impl MinesweeperGame {
             ("Flag cell:".to_string(),            "m, e".to_string()),
             ("Flag cell chording:".to_string(),   "M, E".to_string()),
             ("Pause game:".to_string(),           "p".to_string()),
-            ("Toggle info:".to_string(),          "i".to_string())
-        ]);
-        self.settings = KeyValueList::new(true, "Game Settings".to_string(), vec![
-            ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
-            ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
-            ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
-            ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
-            ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
-            ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
-            ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
-            ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
-            //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
-            //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
-        ]);
-        self.info_panel_min_width = 25;
-        self.info_panel_max_width = 50;
+            ("Toggle info:".to_string(),          "i".to_string()),
+            ("Toggle delta mode:".to_string(),    "u".to_string()),
+        ])
     }
 
     fn toggle_delta_mode(&mut self) {
@@ -1088,9 +1095,80 @@ impl MinesweeperGame {
 }
 
 fn main() -> color_eyre::Result<()> {
+    let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
+    let mut mines: u16 = 20;
+    let mut show_info = true;
+    let mut delta_mode = true;
+    let mut args = env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "-h" | "-?" | "--help" => {
+                let controls = MinesweeperGame::get_controls();
+                println!("{}", controls.title);
+                let width = (controls.constraint_len+1) as usize;
+                for c in controls.array {
+                    println!("  {}{}", format!("{:width$}", c.0), c.1);
+                }
+                println!("Commandline arguments");
+                println!("  -h, -?, --help            Show this menu");
+                println!("  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4");
+                println!("  -m, --mines               Change amount of mines. An unsigned integer");
+                println!("  -i, --show_info           Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -u, --delta_mode          Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)");
+                println!("Default settings as a command");
+                println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t");
+                return Ok(())
+            },
+            "-d" | "--dim" | "--dimension" => {
+                let x = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                dim.x = x.parse::<i16>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", x, arg).as_str());
+                let y = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                dim.y = y.parse::<i16>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", y, arg).as_str());
+                let z = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                dim.z = z.parse::<i16>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", z, arg).as_str());
+                let w = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                dim.w = w.parse::<i16>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", w, arg).as_str());
+            },
+            "-m" | "--mines" => {
+                let value = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                mines = value.parse::<u16>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", value, arg).as_str());
+            },
+            "-i" | "--show_info" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" => show_info = true,
+                    "f" | "n" | "false" | "no" => show_info = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
+            "-u" | "--delta_mode" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" => delta_mode = true,
+                    "f" | "n" | "false" | "no" => delta_mode = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
+            &_ => {
+                panic!("Unrecognized option \"{arg}\"");
+            }
+        }
+    }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode);
     ratatui::restore();
     result
 }
@@ -1110,9 +1188,9 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool) -> Result<()> {
         self.running = true;
-        self.game.init();
+        self.game.init(dim, mines, show_info, delta_mode);
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             self.handle_crossterm_events()?;

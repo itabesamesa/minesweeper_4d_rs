@@ -13,26 +13,26 @@ You have to find all the mines in a 4 dimensional field. The pink cursor highlig
 ### Controls
 
 <pre>
-  Move right in x:       right arrow, l
-  Move left in x:        left arrow, h
-  Move up in y:          up arrow, k
-  Move down in y:        down arrow, j
-  Move right in z:       d, ctrl-l
-  Move left in z:        a, ctrl-h
-  Move up in q:          w, ctrl-k
-  Move down in y:        s, ctrl-j
-  Mark bomb:             m, e
-  Mark bomb chording:    M, E
-  Uncover field:         space
-  Find empty field:      f (only possible at the start of the game)
-  Turn on delta mode:    u
-  Give up/reveal field:  g
-  Pause game:            p
-  Open options:          o
-  Start new game:        n
-  Print controls:        c
-  Toggle info:           i
-  Quit game:             q
+  Quit:                 ctrl+C, q, ESC
+  Controls:             c
+  Settings:             o
+  Move left in x:       Leftarrow, h
+  Move right in x:      Rightarrow, l
+  Move up in y:         Uparrow, k
+  Move down in y:       Downarrow, j
+  Move left in z:       a, ctrl+h
+  Move right in z:      d, ctrl+l
+  Move up in w:         w, ctrl+k
+  Move down in w:       s, ctrl+j
+  New game:             n
+  Find free cell:       f
+  Uncover cell:         SPACE
+  Give up/reveal field: g
+  Flag cell:            m, e
+  Flag cell chording:   M, E
+  Pause game:           p
+  Toggle info:          i
+  Toggle delta mode:    u
 </pre>
 
 ## Compiling and running
@@ -53,6 +53,22 @@ Run:
 
 ```
 ./target/release/minesweeper_4d
+```
+
+### Commandline arguments
+
+<pre>
+  -h, -?, --help            Show this menu
+  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4
+  -m, --mines               Change amount of mines. An unsigned integer
+  -i, --show_info           Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)
+  -u, --delta_mode          Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)
+</pre>
+
+Default settings as a command
+
+```
+minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t
 ```
 
 ## TODO
