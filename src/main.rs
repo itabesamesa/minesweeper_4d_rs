@@ -79,7 +79,7 @@ enum SettingsOptionTypes {
 }
 
 #[derive(Copy, Clone, Debug, Default)]
-struct Point {
+pub struct Point {
     x: i16,
     y: i16,
     z: i16,
