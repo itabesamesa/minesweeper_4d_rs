@@ -1,6 +1,6 @@
 # minesweeper_4d
 
-This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one (assuming the one I abandoned was supposed to be 4D), 4th public and 2nd (excluding the abandoned one) 1-4D one.
+This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one (assuming all the ones I abandoned where at least supposed to be 4D), 4th public and 2nd (excluding the 3 abandoned ones) 4D one.
 
 [Ratatui]: https://ratatui.rs
 
