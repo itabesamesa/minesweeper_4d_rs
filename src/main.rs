@@ -1153,8 +1153,8 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -h, -?, --help            Show this menu");
                 println!("  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4");
                 println!("  -m, --mines               Change amount of mines. An unsigned integer");
-                println!("  -i, --show_info           Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)");
-                println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
                 println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t");
                 return Ok(())

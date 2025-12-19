@@ -61,8 +61,8 @@ Run:
   -h, -?, --help            Show this menu
   -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4
   -m, --mines               Change amount of mines. An unsigned integer
-  -i, --show_info           Toggle info box. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)
-  -u, --delta_mode          Toggle delta mode. A boolean value t/f/ or true/false or y/n or yes/no (any capitalisation)
+  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
+  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
 </pre>
 
 Default settings as a command
