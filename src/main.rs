@@ -793,7 +793,7 @@ impl MinesweeperField {
                     }
                 }
                 self.uncovered_cells += 1;
-                if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
+                if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) && !matches(self.state, MinesweeperFieldState::ClickedMine) {
                     self.state = MinesweeperFieldState::Won;
                 }
             } else if cell.rel == 0 {
