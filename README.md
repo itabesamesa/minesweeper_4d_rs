@@ -10,6 +10,10 @@ This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one
 
 You have to find all the mines in a 4 dimensional field. The pink cursor highlights the current field you're on and its value shows the number of bombs that are around it. To help you find which fields are in the area of influence of the cursor, they are highlighted in a less saturated shade of pink. Have fun finding all the mines!
 
+In delta mode, each cell displays the amount of not yet flagged mines and 0, if there are covered cells in its area of influence.
+
+In sweep mode, whenever you flag a mine, it will be removed. Other than that, it is similar to delta mode. When switching to sweep mode, all already flagged mines will be removed. Falsely flagged cells will end the game.
+
 ### Controls
 
 <pre>
@@ -33,6 +37,7 @@ You have to find all the mines in a 4 dimensional field. The pink cursor highlig
   Pause game:           p
   Toggle info:          i
   Toggle delta mode:    u
+  Toggle sweep mode:    U
 </pre>
 
 ## Compiling and running
@@ -63,6 +68,7 @@ Run:
   -m, --mines               Change amount of mines. An unsigned integer
   -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
   -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
+  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
 </pre>
 
 Default settings as a command

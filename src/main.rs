@@ -842,7 +842,7 @@ impl MinesweeperField {
                     });
                     self.flagged_mines += 1;
                     self.uncovered_cells -= 1;
-                    if self.mines == self.flagged_mines && !matches!(self.state, MinesweeperFieldState::RevealField) {
+                    if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
                         self.state = MinesweeperFieldState::Won;
                     }
                 } else {
@@ -1189,7 +1189,7 @@ impl MinesweeperGame {
 
 fn main() -> color_eyre::Result<()> {
     let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
-    let mut mines: u16 = 10;
+    let mut mines: u16 = 20;
     let mut show_info = true;
     let mut delta_mode = true;
     let mut sweep_mode = false;
