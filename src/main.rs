@@ -364,10 +364,7 @@ impl MinesweeperCell {
     }
 
     fn set_coord(&mut self, p: Point) {
-        self.coord.x = p.x;
-        self.coord.y = p.y;
-        self.coord.z = p.z;
-        self.coord.w = p.w;
+        self.coord = p;
     }
 
     fn set_active(&mut self, t: bool) {
@@ -398,6 +395,10 @@ impl MinesweeperCell {
 
     fn dec_rel(&mut self) {
         self.rel -= 1;
+    }
+
+    fn dec_abs(&mut self) {
+        self.abs -= 1;
     }
 
     fn get_light_dark_color(&self, light: Color, dark: Color) -> Color {
@@ -479,6 +480,7 @@ struct MinesweeperField {
     uncovered_cells: u16,
     flagged_mines: u16,
     delta_mode: bool,
+    sweep_mode: bool,
     started: DateTime<Local>,
     ended: DateTime<Local>,
     field: Vec<MinesweeperCell>
@@ -544,7 +546,7 @@ impl Widget for MinesweeperField {
 }
 
 impl MinesweeperField {
-    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool) {
+    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool, sweep_mode: bool) {
         self.state = MinesweeperFieldState::New;
         self.dim = dim;
         self.seed = 0;
@@ -554,6 +556,7 @@ impl MinesweeperField {
         self.uncovered_cells = 0;
         self.flagged_mines = 0;
         self.delta_mode = delta_mode;
+        self.sweep_mode = sweep_mode;
         self.area = self.dim.calc_area();
         self.started = Local::now();
         self.ended = self.started;
@@ -791,10 +794,10 @@ impl MinesweeperField {
                         } //should still set print_zero when not in delta_mode to avoid graphical bugs when
                         //swapping between modes
                     }
-                }
-                self.uncovered_cells += 1;
-                if usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) && !matches!(self.state, MinesweeperFieldState::ClickedMine) {
-                    self.state = MinesweeperFieldState::Won;
+                    self.uncovered_cells += 1;
+                    if !self.sweep_mode && usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
+                        self.state = MinesweeperFieldState::Won;
+                    }
                 }
             } else if cell.rel == 0 {
                 if self.delta_mode {
@@ -819,22 +822,51 @@ impl MinesweeperField {
     }
 
     fn toggle_flagged(&mut self, p: Point) {
-        let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
-        cell.is_flagged = !cell.is_flagged;
-        if cell.is_flagged {
-            self.do_in_neighbourhood(p, |s, p| {
-                let cell = s.cell_at(p).unwrap();
-                cell.dec_rel();
-            });
-            self.flagged_mines += 1;
+        if self.sweep_mode {
+            let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
+            if cell.is_covered {
+                if cell.is_bomb {
+                    cell.set_bomb(false);
+                    self.uncover_cell(self.loc);
+                    self.do_in_neighbourhood(p, |s, p| {
+                        let cell = s.cell_at(p).unwrap();
+                        if cell.rel == cell.abs.try_into().unwrap() {
+                            cell.dec_all();
+                        } else {
+                            cell.dec_abs();
+                        }
+                        if cell.abs == 0 {
+                            let loc = cell.coord;
+                            s.uncover_cell(loc);
+                        }
+                    });
+                    self.flagged_mines += 1;
+                    self.uncovered_cells -= 1;
+                    if self.mines == self.flagged_mines && !matches!(self.state, MinesweeperFieldState::RevealField) {
+                        self.state = MinesweeperFieldState::Won;
+                    }
+                } else {
+                    self.state = MinesweeperFieldState::ClickedMine;
+                }
+            }
         } else {
-            self.do_in_neighbourhood(p, |s, p| {
-                let cell = s.cell_at(p).unwrap();
-                cell.inc_rel();
-            });
-            self.flagged_mines -= 1;
+            let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
+            cell.is_flagged = !cell.is_flagged;
+            if cell.is_flagged {
+                self.do_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    cell.dec_rel();
+                });
+                self.flagged_mines += 1;
+            } else {
+                self.do_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    cell.inc_rel();
+                });
+                self.flagged_mines -= 1;
+            }
+            self.set_print_zero(p);
         }
-        self.set_print_zero(p);
     }
 
     fn toggle_flagged_chording(&mut self, p: Point) {
@@ -873,6 +905,10 @@ impl MinesweeperField {
 
     fn delta_mode_str(&self) -> String {
         (if self.delta_mode {"On"} else {"Off"}).to_string()
+    }
+
+    fn sweep_mode_str(&self) -> String {
+        (if self.sweep_mode {"On"} else {"Off"}).to_string()
     }
 
     /*fn seed_str(&self) -> String {
@@ -1003,12 +1039,13 @@ impl Widget for MinesweeperGame {
 }
 
 impl MinesweeperGame {
-    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool) {
-        self.field.init(dim, mines, delta_mode);
+    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) {
+        self.field.init(dim, mines, delta_mode, sweep_mode);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
         self.info = KeyValueList::new(false, "Game Info".to_string(), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
+            ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
             //("Seed:".to_string(),            self.field.seed_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
             ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
@@ -1028,6 +1065,7 @@ impl MinesweeperGame {
                 ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
                 ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
                 ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
+                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}}),
                 //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
                 //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
             ]),
@@ -1069,6 +1107,7 @@ impl MinesweeperGame {
             ("Pause game:".to_string(),           "p".to_string()),
             ("Toggle info:".to_string(),          "i".to_string()),
             ("Toggle delta mode:".to_string(),    "u".to_string()),
+            ("Toggle sweep mode:".to_string(),    "U".to_string()),
         ])
     }
 
@@ -1077,24 +1116,37 @@ impl MinesweeperGame {
         self.info.array[0].1 = self.field.delta_mode_str();
     }
 
+    fn toggle_sweep_mode(&mut self) {
+        self.field.sweep_mode = !self.field.sweep_mode;
+        self.info.array[1].1 = self.field.sweep_mode_str();
+        if self.field.sweep_mode {
+            for cell in self.field.field.clone() {
+                if cell.is_flagged {
+                    self.field.cell_at(cell.coord).unwrap().is_flagged = false;
+                    self.field.toggle_flagged(cell.coord);
+                }
+            }
+        }
+    }
+
     fn update_info_cells_uncovered(&mut self) {
-        self.info.array[1].1 = self.field.cells_uncovered_str();
+        self.info.array[2].1 = self.field.cells_uncovered_str();
     }
 
     fn update_info_mines_flagged(&mut self) {
-        self.info.array[2].1 = self.field.mines_flagged_str();
+        self.info.array[3].1 = self.field.mines_flagged_str();
     }
 
     fn update_info_loc(&mut self) {
-        self.info.array[4].1 = self.field.loc_str();
+        self.info.array[5].1 = self.field.loc_str();
     }
 
     fn update_info_started(&mut self) {
-        self.info.array[5].1 = self.field.started_str();
+        self.info.array[6].1 = self.field.started_str();
     }
 
     fn update_info_state(&mut self) {
-        self.info.array[6].1 = self.field.state_str();
+        self.info.array[7].1 = self.field.state_str();
     }
 
     fn move_in_field(&mut self, f: impl Fn(&mut MinesweeperField)) {
@@ -1105,13 +1157,14 @@ impl MinesweeperGame {
     fn regenerate_field(&mut self) {
         self.field.regenerate();
         self.info.array[0].1 = self.field.delta_mode_str();
+        self.info.array[1].1 = self.field.sweep_mode_str();
         //self.info.array[1].1 = self.field.seed_str();
-        self.info.array[1].1 = self.field.cells_uncovered_str();
-        self.info.array[2].1 = self.field.mines_flagged_str();
-        self.info.array[3].1 = self.field.dim_str();
-        self.info.array[4].1 = self.field.loc_str();
-        self.info.array[5].1 = self.field.started_str();
-        self.info.array[6].1 = self.field.state_str();
+        self.info.array[2].1 = self.field.cells_uncovered_str();
+        self.info.array[3].1 = self.field.mines_flagged_str();
+        self.info.array[4].1 = self.field.dim_str();
+        self.info.array[5].1 = self.field.loc_str();
+        self.info.array[6].1 = self.field.started_str();
+        self.info.array[7].1 = self.field.state_str();
     }
 
     fn apply_settings(&mut self) {
@@ -1136,9 +1189,10 @@ impl MinesweeperGame {
 
 fn main() -> color_eyre::Result<()> {
     let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
-    let mut mines: u16 = 20;
+    let mut mines: u16 = 10;
     let mut show_info = true;
     let mut delta_mode = true;
+    let mut sweep_mode = false;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -1155,6 +1209,7 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -m, --mines               Change amount of mines. An unsigned integer");
                 println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
                 println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t");
                 return Ok(())
@@ -1201,6 +1256,15 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
+            "-U" | "--sweep_mode" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" => sweep_mode = true,
+                    "f" | "n" | "false" | "no" => sweep_mode = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
             &_ => {
                 panic!("Unrecognized option \"{arg}\"");
             }
@@ -1208,7 +1272,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode);
     ratatui::restore();
     result
 }
@@ -1228,9 +1292,9 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) -> Result<()> {
         self.running = true;
-        self.game.init(dim, mines, show_info, delta_mode);
+        self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             self.handle_crossterm_events()?;
@@ -1303,6 +1367,10 @@ impl App {
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
+                            (_, KeyCode::Char('U')) => {
+                                self.game.toggle_sweep_mode();
+                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                            },
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
@@ -1343,6 +1411,10 @@ impl App {
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
+                            (_, KeyCode::Char('U')) => {
+                                self.game.toggle_sweep_mode();
+                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                            },
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
@@ -1359,10 +1431,12 @@ impl App {
                             (_, KeyCode::Char('m') | KeyCode::Char('e')) => {
                                 self.game.field.toggle_flagged(self.game.field.loc);
                                 self.game.update_info_mines_flagged();
+                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
                             },
                             (_, KeyCode::Char('M') | KeyCode::Char('E')) => {
                                 self.game.field.toggle_flagged_chording(self.game.field.loc);
                                 self.game.update_info_mines_flagged();
+                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
                             },
                             (_, KeyCode::Char('g')) => {
                                 if !matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
@@ -1385,6 +1459,10 @@ impl App {
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
+                            (_, KeyCode::Char('U')) => {
+                                self.game.toggle_sweep_mode();
+                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                            },
                             _ => {}
                         }
                     },
