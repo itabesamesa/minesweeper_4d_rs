@@ -322,6 +322,15 @@ impl SettingsOption {
 }
 
 #[derive(Copy, Clone, Debug)]
+struct Mark {
+    color: Color,
+    total: usize,
+    amount: usize,
+    mines: usize,
+    origin: Point,
+}
+
+#[derive(Copy, Clone, Debug)]
 struct MinesweeperCell {
     coord: Point,
     is_bomb: bool,
@@ -333,7 +342,7 @@ struct MinesweeperCell {
     in_active_neighbourhood: bool,
     print_zero: bool,
     is_marked: bool,
-    mark_color: Color,
+    mark: Mark,
 }
 
 impl MinesweeperCell {
@@ -349,16 +358,49 @@ impl MinesweeperCell {
             in_active_neighbourhood: false,
             print_zero: false,
             is_marked: false,
-            mark_color: Color::Black,
+            mark: Mark {
+                color: Color::Black,
+                total: 0,
+                amount: 0,
+                mines: 0,
+                origin: Point::new(),
+            },
         }
     }
 
+    fn render_mark(self, area: Rect, buf: &mut Buffer) {
+        let fg = match self.mark.color {
+            Color::Rgb(r, g, b) => {
+                if g > 180 || (r as u16)+(g as u16)+(b as u16) > 450 { // yoinked from https://ux.stackexchange.com/a/151290
+                    Color::Black
+                } else {
+                    Color::White
+                }
+            },
+            _ => Color::White,
+        };
+        buf.set_string(area.left(), area.top(),
+            if self.mark.mines < 10 {
+                char::from_u32(0xff10+(self.mark.mines as u32)).unwrap().to_string()
+            } else {
+                format!("{:2}", self.mark.mines)
+            }, Style::default().fg(fg).bg(if self.is_active {Color::Rgb(255, 42, 255)} else {self.mark.color}))
+    }
+
     fn render_rel(self, area: Rect, buf: &mut Buffer) {
-        buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+        if self.is_marked && !self.is_flagged {
+            self.render_mark(area, buf);
+        } else {
+            buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+        }
     }
 
     fn render_abs(self, area: Rect, buf: &mut Buffer) {
-        buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+        if self.is_marked && !self.is_flagged {
+            self.render_mark(area, buf);
+        } else {
+            buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+        }
     }
 
     fn set_bomb(&mut self, t: bool) {
@@ -419,21 +461,17 @@ impl MinesweeperCell {
         if self.is_active {
             Color::Rgb(255, 42, 255)
         } else {
-            if self.is_marked {
-                self.mark_color
-            } else {
-                if self.is_covered {
-                    if self.in_active_neighbourhood {
-                        self.get_light_dark_color(Color::Rgb(128, 115, 128), Color::Rgb(89, 80, 89))
-                    } else {
-                        self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
-                    }
+            if self.is_covered {
+                if self.in_active_neighbourhood {
+                    self.get_light_dark_color(Color::Rgb(128, 115, 128), Color::Rgb(89, 80, 89))
                 } else {
-                    if self.in_active_neighbourhood {
-                        self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
-                    } else {
-                        self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
-                    }
+                    self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
+                }
+            } else {
+                if self.in_active_neighbourhood {
+                    self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
+                } else {
+                    self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
                 }
             }
         }
@@ -476,14 +514,12 @@ impl MinesweeperCell {
             "  ".to_string()
         }
     }
-}
 
-#[derive(Clone, Debug, Default)]
-struct Mark {
-    color: Color,
-    total: usize,
-    amount: usize,
-    origin: Point,
+    fn rm_mark(&mut self) {
+        self.is_marked = false;
+        self.mark.color = Color::Black;
+        self.mark.mines = 0;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -827,7 +863,7 @@ impl MinesweeperField {
                 cell.set_covered(false);
                 cell.set_print_zero(false);
                 let dec_mark = cell.is_marked;
-                let mark_color = cell.mark_color;
+                let mark_color = cell.mark.color;
                 cell.is_marked = false;
                 if cell.is_bomb {
                     if !matches!(self.state, MinesweeperFieldState::RevealField) {
@@ -846,17 +882,24 @@ impl MinesweeperField {
                     if !self.sweep_mode && usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
                         self.state = MinesweeperFieldState::Won;
                     }
-                }
-                if dec_mark {
-                    match self.marks.get_mut(&mark_color) {
-                        Some(m) => {
-                            m.amount -= 1;
-                            eprintln!("{:#?}", m);
-                            if m.amount == 0 {
-                                let _ = self.marks.remove(&mark_color);
-                            }
-                        },
-                        None => (),
+                    if dec_mark {
+                        match self.marks.get_mut(&mark_color) {
+                            Some(m) => {
+                                m.amount -= 1;
+                                m.total -= 1;
+                                if m.amount == 0 {
+                                    let loc = m.origin;
+                                    let _ = self.marks.remove(&mark_color);
+                                    self.do_in_neighbourhood(loc, |s, p| {
+                                        let cell = s.cell_at(p).unwrap();
+                                        if cell.is_marked && cell.mark.color == mark_color {
+                                            cell.rm_mark();
+                                        }
+                                    });
+                                }
+                            },
+                            None => (),
+                        }
                     }
                 }
             } else if cell.rel == 0 {
@@ -912,18 +955,50 @@ impl MinesweeperField {
         } else {
             let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
             cell.is_flagged = !cell.is_flagged;
+            let is_marked = cell.is_marked;
+            let mark_color = cell.mark.color;
             if cell.is_flagged {
                 self.do_in_neighbourhood(p, |s, p| {
                     let cell = s.cell_at(p).unwrap();
                     cell.dec_rel();
                 });
                 self.flagged_mines += 1;
+                if is_marked {
+                    match self.marks.get_mut(&mark_color) {
+                        Some(m) => {
+                            m.amount -= 1;
+                            m.total -= 1;
+                            m.mines -= 1;
+                            if m.amount == 0 || m.mines == 0 {
+                                let loc = m.origin;
+                                let _ = self.marks.remove(&mark_color);
+                                self.do_in_neighbourhood(loc, |s, p| {
+                                    let cell = s.cell_at(p).unwrap();
+                                    if cell.is_marked && cell.mark.color == mark_color {
+                                        cell.rm_mark();
+                                    }
+                                });
+                            }
+                        },
+                        None => (),
+                    }
+                }
             } else {
                 self.do_in_neighbourhood(p, |s, p| {
                     let cell = s.cell_at(p).unwrap();
                     cell.inc_rel();
                 });
                 self.flagged_mines -= 1;
+                if is_marked {
+                    match self.marks.get_mut(&mark_color) {
+                        Some(m) => {
+                            m.amount += 1;
+                            m.total += 1;
+                            m.mines += 1;
+                        },
+                        None => (),
+                    }
+                }
             }
             self.set_print_zero(p);
         }
@@ -957,21 +1032,19 @@ impl MinesweeperField {
 
     fn add_mark(&mut self, p: Point) {
         let cell = self.cell_at(p).unwrap();
-        if !cell.is_covered {
+        if !cell.is_covered && cell.rel >= 0 {
             let marked = self.find_in_neighbourhood(p, |s, p| {
                 let cell = s.cell_at(p).unwrap();
-                if cell.is_marked && cell.mark_color != Color::Black {
-                    Some(cell.mark_color)
+                if cell.is_marked && !cell.is_flagged && cell.mark.color != Color::Black {
+                    Some(cell.mark.color)
                 } else {
                     None
                 }
             });
-            eprintln!("{:#?}", marked);
             let mut marked_count: HashMap<Color, usize> = HashMap::new();
             for m in marked {
                 *marked_count.entry(m).or_default() += 1;
             }
-            eprintln!("{:#?}", marked_count);
             let mut contained: Vec<Mark> = Vec::new();
             for (color, amount) in marked_count {
                 match self.marks.get(&color) {
@@ -983,22 +1056,23 @@ impl MinesweeperField {
                     None => (),
                 }
             }
-            eprintln!("{:#?}", contained);
-            let mut rel = self.cell_at(p).unwrap().rel;
+            let mut mines: usize = self.cell_at(p).unwrap().rel.try_into().unwrap();
             for m in &contained {
-                rel -= self.cell_at(m.origin).unwrap().rel;
+                mines -= m.mines;
             }
-            if rel != 0 {
+            if mines != 0 {
                 let c = Color::Rgb(self.rng.random_range(1..255), self.rng.random_range(1..255), self.rng.random_range(1..255)); // #000000 reserved for uncoverable cells
                 let _: HashMap<Color, Mark> = self.marks.extract_if(|_k, v| v.origin == p).collect();
-                self.marks.insert(c, Mark {color: c, total: 0, amount: 0, origin: p});
-                self.do_in_neighbourhood(p, |s, p| {
-                    let cell = s.cell_at(p).unwrap();
-                    if cell.is_covered {
+                self.marks.insert(c, Mark {color: c, total: 0, amount: 0, mines: mines, origin: p});
+                self.do_in_neighbourhood(p, |s, p2| {
+                    let cell = s.cell_at(p2).unwrap();
+                    if cell.is_covered && !cell.is_flagged {
                         if cell.is_marked {
-                            let cc = cell.mark_color;
-                            if cc != Color::Black {
-                                cell.mark_color = c;
+                            let cc = cell.mark.color;
+                            if cc != Color::Black && !contained.iter().any(|x| x.color == cc) {
+                                cell.mark.color = c;
+                                cell.mark.mines = mines;
+                                cell.mark.origin = p;
                                 match s.marks.get_mut(&cc) {
                                     Some(m) => {
                                         m.amount -= 1;
@@ -1015,7 +1089,9 @@ impl MinesweeperField {
                             }
                         } else {
                             cell.is_marked = true;
-                            cell.mark_color = c;
+                            cell.mark.color = c;
+                            cell.mark.mines = mines;
+                            cell.mark.origin = p;
                             match s.marks.get_mut(&c) {
                                 Some(m) => m.amount += 1,
                                 None => (),
@@ -1027,14 +1103,14 @@ impl MinesweeperField {
                     Some(m) => m.total = m.amount,
                     None => (),
                 }
-                eprintln!("{:#?}\n\n", self.marks);
             } else {
                 self.do_in_neighbourhood(p, |s, p| {
                     let cell = s.cell_at(p).unwrap();
-                    if cell.is_covered {
-                        if cell.is_marked && cell.mark_color != Color::Black && !contained.iter().any(|x| x.color == cell.mark_color) {
-                            let cc = cell.mark_color;
-                            cell.mark_color = Color::Black;
+                    if cell.is_covered && !cell.is_flagged {
+                        if cell.is_marked && cell.mark.color != Color::Black && !contained.iter().any(|x| x.color == cell.mark.color) {
+                            let cc = cell.mark.color;
+                            cell.mark.color = Color::Black;
+                            cell.mark.mines = 0;
                             match s.marks.get_mut(&cc) {
                                 Some(m) => m.total -= 1,
                                 None => (),
@@ -1050,11 +1126,38 @@ impl MinesweeperField {
 
     fn uncover_black_cell(&mut self) {
         for cell in &self.field.clone() {
-            if cell.is_marked && cell.mark_color == Color::Black {
+            if cell.is_marked && cell.mark.color == Color::Black {
                 let loc = cell.coord;
                 self.uncover_cell(loc);
             }
         }
+    }
+
+    fn flag_definite_marked_cell(&mut self) {
+        for (color, mark) in &self.marks.clone() {
+            if mark.total == mark.amount && mark.total == mark.mines {
+                self.do_in_neighbourhood(mark.origin, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    if cell.is_covered && cell.is_marked && cell.mark.color == *color {
+                        let loc = cell.coord;
+                        s.toggle_flagged(loc);
+                    }
+                });
+                let _ = self.marks.remove(color);
+            }
+        }
+    }
+
+    fn clear_marks(&mut self) {
+        for cell in &mut self.field { // maybe iterate through marks instead of field... could be
+                                      // more efficient
+            if cell.is_marked {
+                cell.is_marked = false;
+                cell.mark.color = Color::Black;
+                cell.mark.mines = 0;
+            }
+        }
+        self.marks.clear();
     }
 
     fn get_display_width(&self) -> u16 {
@@ -1254,27 +1357,31 @@ impl MinesweeperGame {
 
     fn get_controls() -> KeyValueList<String> {
         KeyValueList::new(false, "Game Controls".to_string(), vec![
-            ("Quit:".to_string(),                 "ctrl+C, q, ESC".to_string()),
-            ("Controls:".to_string(),             "c".to_string()),
-            ("Settings:".to_string(),             "o".to_string()),
-            ("Move left in x:".to_string(),       "Leftarrow, h".to_string()),
-            ("Move right in x:".to_string(),      "Rightarrow, l".to_string()),
-            ("Move up in y:".to_string(),         "Uparrow, k".to_string()),
-            ("Move down in y:".to_string(),       "Downarrow, j".to_string()),
-            ("Move left in z:".to_string(),       "a, ctrl+h".to_string()),
-            ("Move right in z:".to_string(),      "d, ctrl+l".to_string()),
-            ("Move up in w:".to_string(),         "w, ctrl+k".to_string()),
-            ("Move down in w:".to_string(),       "s, ctrl+j".to_string()),
-            ("New game:".to_string(),             "n".to_string()),
-            ("Find free cell:".to_string(),       "f".to_string()),
-            ("Uncover cell:".to_string(),         "SPACE".to_string()),
-            ("Give up/reveal field:".to_string(), "g".to_string()),
-            ("Flag cell:".to_string(),            "m, e".to_string()),
-            ("Flag cell chording:".to_string(),   "M, E".to_string()),
-            ("Pause game:".to_string(),           "p".to_string()),
-            ("Toggle info:".to_string(),          "i".to_string()),
-            ("Toggle delta mode:".to_string(),    "u".to_string()),
-            ("Toggle sweep mode:".to_string(),    "U".to_string()),
+            ("Quit:".to_string(),                           "ctrl+c, q, ESC".to_string()),
+            ("Controls:".to_string(),                       "c".to_string()),
+            ("Settings:".to_string(),                       "o".to_string()),
+            ("Move left in x:".to_string(),                 "Leftarrow, h".to_string()),
+            ("Move right in x:".to_string(),                "Rightarrow, l".to_string()),
+            ("Move up in y:".to_string(),                   "Uparrow, k".to_string()),
+            ("Move down in y:".to_string(),                 "Downarrow, j".to_string()),
+            ("Move left in z:".to_string(),                 "a, ctrl+h".to_string()),
+            ("Move right in z:".to_string(),                "d, ctrl+l".to_string()),
+            ("Move up in w:".to_string(),                   "w, ctrl+k".to_string()),
+            ("Move down in w:".to_string(),                 "s, ctrl+j".to_string()),
+            ("New game:".to_string(),                       "n".to_string()),
+            ("Find free cell:".to_string(),                 "f".to_string()),
+            ("Uncover cell:".to_string(),                   "SPACE".to_string()),
+            ("Give up/reveal field:".to_string(),           "g".to_string()),
+            ("Flag cell:".to_string(),                      "m, e".to_string()),
+            ("Flag cell chording:".to_string(),             "M, E".to_string()),
+            ("Pause game:".to_string(),                     "p".to_string()),
+            ("Toggle info:".to_string(),                    "i".to_string()),
+            ("Toggle delta mode:".to_string(),              "u".to_string()),
+            ("Toggle sweep mode:".to_string(),              "U".to_string()),
+            ("Clear all marks:".to_string(),                "ctrl+x".to_string()),
+            ("Flag obvious marked cells:".to_string(),      "alt+x".to_string()),
+            ("Mark cell:".to_string(),                      "x".to_string()),
+            ("Uncover obvious marked cells:".to_string(),    "X".to_string()),
         ])
     }
 
@@ -1626,6 +1733,8 @@ impl App {
                                     self.game.update_info_cells_uncovered();
                                 }
                             },
+                            (KeyModifiers::CONTROL, KeyCode::Char('x')) => self.game.field.clear_marks(),
+                            (KeyModifiers::ALT, KeyCode::Char('x')) => self.game.field.flag_definite_marked_cell(),
                             (_, KeyCode::Char('x')) => self.game.field.add_mark(self.game.field.loc),
                             (_, KeyCode::Char('X')) => self.game.field.uncover_black_cell(),
                             _ => {}
