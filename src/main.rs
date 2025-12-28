@@ -4,6 +4,7 @@ use std::{
     env,
     str,
     time::{Duration, Instant},
+    collections::HashMap,
 };
 use color_eyre::Result;
 use crossterm::{
@@ -348,7 +349,7 @@ impl MinesweeperCell {
             in_active_neighbourhood: false,
             print_zero: false,
             is_marked: false,
-            mark_color: Color::Rgb(255, 42, 255),
+            mark_color: Color::Black,
         }
     }
 
@@ -478,6 +479,14 @@ impl MinesweeperCell {
 }
 
 #[derive(Clone, Debug, Default)]
+struct Mark {
+    color: Color,
+    total: usize,
+    amount: usize,
+    origin: Point,
+}
+
+#[derive(Clone, Debug, Default)]
 struct MinesweeperField {
     state: MinesweeperFieldState,
     dim: Point,
@@ -493,7 +502,8 @@ struct MinesweeperField {
     started: DateTime<Local>,
     duration: Duration,
     //ended: DateTime<Local>,
-    field: Vec<MinesweeperCell>
+    field: Vec<MinesweeperCell>,
+    marks: HashMap<Color, Mark>,
 }
 
 impl Widget for MinesweeperField {
@@ -570,6 +580,7 @@ impl MinesweeperField {
         self.area = self.dim.calc_area();
         self.started = Local::now();
         self.duration = Duration::ZERO;
+        self.marks = HashMap::new();
         //self.ended = self.started;
         self.fill_field();
         self.set_active_cell(true);
@@ -593,6 +604,7 @@ impl MinesweeperField {
 
     fn regenerate(&mut self) {
         self.field.clear();
+        self.marks.clear();
         self.fill_field();
         self.set_active_cell(true);
         self.place_mines();
@@ -653,6 +665,27 @@ impl MinesweeperField {
             }
         }
         t
+    }
+
+    fn find_in_neighbourhood<T>(&mut self, p: Point, f: impl Fn(&mut MinesweeperField, Point) -> Option<T>) -> Vec<T> {
+        let mut v: Vec<T> = Vec::new();
+        for w in -1..=1 {
+            for z in -1..=1 {
+                for y in -1..=1 {
+                    for x in -1..=1 {
+                        let coord = p.offset(Point {x: x, y: y, z: z, w: w});
+                        if (Point {x: -1, y: -1, z: -1, w: -1}) < coord && coord < self.dim {
+                            //this comp is on purpose cause it kinda funky...
+                            match f(self, coord) {
+                                Some(r) => v.push(r),
+                                None => (),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        v
     }
 
     fn place_mines(&mut self) {
@@ -793,6 +826,9 @@ impl MinesweeperField {
             if cell.is_covered {
                 cell.set_covered(false);
                 cell.set_print_zero(false);
+                let dec_mark = cell.is_marked;
+                let mark_color = cell.mark_color;
+                cell.is_marked = false;
                 if cell.is_bomb {
                     if !matches!(self.state, MinesweeperFieldState::RevealField) {
                         self.state = MinesweeperFieldState::ClickedMine;
@@ -809,6 +845,18 @@ impl MinesweeperField {
                     self.uncovered_cells += 1;
                     if !self.sweep_mode && usize::from(self.uncovered_cells+self.mines) == self.area && !matches!(self.state, MinesweeperFieldState::RevealField) {
                         self.state = MinesweeperFieldState::Won;
+                    }
+                }
+                if dec_mark {
+                    match self.marks.get_mut(&mark_color) {
+                        Some(m) => {
+                            m.amount -= 1;
+                            eprintln!("{:#?}", m);
+                            if m.amount == 0 {
+                                let _ = self.marks.remove(&mark_color);
+                            }
+                        },
+                        None => (),
                     }
                 }
             } else if cell.rel == 0 {
@@ -904,6 +952,108 @@ impl MinesweeperField {
             self.loc = p;
             self.set_active_cell(true);
             self.uncover_cell(p);
+        }
+    }
+
+    fn add_mark(&mut self, p: Point) {
+        let cell = self.cell_at(p).unwrap();
+        if !cell.is_covered {
+            let marked = self.find_in_neighbourhood(p, |s, p| {
+                let cell = s.cell_at(p).unwrap();
+                if cell.is_marked && cell.mark_color != Color::Black {
+                    Some(cell.mark_color)
+                } else {
+                    None
+                }
+            });
+            eprintln!("{:#?}", marked);
+            let mut marked_count: HashMap<Color, usize> = HashMap::new();
+            for m in marked {
+                *marked_count.entry(m).or_default() += 1;
+            }
+            eprintln!("{:#?}", marked_count);
+            let mut contained: Vec<Mark> = Vec::new();
+            for (color, amount) in marked_count {
+                match self.marks.get(&color) {
+                    Some(m) => {
+                        if m.total == amount {
+                            contained.push(m.clone());
+                        }
+                    },
+                    None => (),
+                }
+            }
+            eprintln!("{:#?}", contained);
+            let mut rel = self.cell_at(p).unwrap().rel;
+            for m in &contained {
+                rel -= self.cell_at(m.origin).unwrap().rel;
+            }
+            if rel != 0 {
+                let c = Color::Rgb(self.rng.random_range(1..255), self.rng.random_range(1..255), self.rng.random_range(1..255)); // #000000 reserved for uncoverable cells
+                let _: HashMap<Color, Mark> = self.marks.extract_if(|_k, v| v.origin == p).collect();
+                self.marks.insert(c, Mark {color: c, total: 0, amount: 0, origin: p});
+                self.do_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    if cell.is_covered {
+                        if cell.is_marked {
+                            let cc = cell.mark_color;
+                            if cc != Color::Black {
+                                cell.mark_color = c;
+                                match s.marks.get_mut(&cc) {
+                                    Some(m) => {
+                                        m.amount -= 1;
+                                        if m.amount == 0 {
+                                            let _ = s.marks.remove(&cc);
+                                        }
+                                    },
+                                    None => (),
+                                }
+                                match s.marks.get_mut(&c) {
+                                    Some(m) => m.amount += 1,
+                                    None => (),
+                                }
+                            }
+                        } else {
+                            cell.is_marked = true;
+                            cell.mark_color = c;
+                            match s.marks.get_mut(&c) {
+                                Some(m) => m.amount += 1,
+                                None => (),
+                            }
+                        }
+                    }
+                });
+                match self.marks.get_mut(&c) {
+                    Some(m) => m.total = m.amount,
+                    None => (),
+                }
+                eprintln!("{:#?}\n\n", self.marks);
+            } else {
+                self.do_in_neighbourhood(p, |s, p| {
+                    let cell = s.cell_at(p).unwrap();
+                    if cell.is_covered {
+                        if cell.is_marked && cell.mark_color != Color::Black && !contained.iter().any(|x| x.color == cell.mark_color) {
+                            let cc = cell.mark_color;
+                            cell.mark_color = Color::Black;
+                            match s.marks.get_mut(&cc) {
+                                Some(m) => m.total -= 1,
+                                None => (),
+                            }
+                        } else {
+                            cell.is_marked = true;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    fn uncover_black_cell(&mut self) {
+        for cell in &self.field.clone() {
+            if cell.is_marked && cell.mark_color == Color::Black {
+                let loc = cell.coord;
+                self.uncover_cell(loc);
+            }
         }
     }
 
@@ -1476,6 +1626,8 @@ impl App {
                                     self.game.update_info_cells_uncovered();
                                 }
                             },
+                            (_, KeyCode::Char('x')) => self.game.field.add_mark(self.game.field.loc),
+                            (_, KeyCode::Char('X')) => self.game.field.uncover_black_cell(),
                             _ => {}
                         }
                     },
