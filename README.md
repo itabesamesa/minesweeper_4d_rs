@@ -20,6 +20,10 @@ In sweep mode, whenever you flag a mine, it will be removed. Other than that, it
 
 With marks you can visualise how many mines are in the area of influence. This is not meant to be used as a way to cheese the game, but rather to help one learn new tactics or for a beginner to get a better grasp on how 4D minesweeper works. The order in which you place marks is important! It can get a bit visually crowded when too many marks are placed, so remember to clear them. Marks overriding other marks is intended and should only happen if the amount of cells with that mark isn't fully enclosed by the newly placed mark
 
+
+https://github.com/user-attachments/assets/913b4012-a483-4150-baad-a219c09b202e
+
+
 ### Controls
 
 <pre>
