@@ -100,6 +100,7 @@ minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f
 - [ ] ~~Make random seedable~~
 - [x] Add chording
 - [x] Editable settings
+- [ ] Make Controls scrollable
 
 ## License
 
