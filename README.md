@@ -6,6 +6,10 @@ This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one
 
 ![An example game](example_gameplay_v2.png)
 
+
+https://github.com/user-attachments/assets/d1e07569-e4ca-4f18-bfa0-eb96f0d7dc50
+
+
 ## How to play
 
 You have to find all the mines in a 4 dimensional field. The pink cursor highlights the current field you're on and its value shows the number of bombs that are around it. To help you find which fields are in the area of influence of the cursor, they are highlighted in a less saturated shade of pink. Have fun finding all the mines!
@@ -74,7 +78,7 @@ Run:
 Default settings as a command
 
 ```
-minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t
+minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f
 ```
 
 ## TODO
