@@ -330,7 +330,9 @@ struct MinesweeperCell {
     rel: i8,
     is_active: bool,
     in_active_neighbourhood: bool,
-    print_zero: bool
+    print_zero: bool,
+    is_marked: bool,
+    mark_color: Color,
 }
 
 impl MinesweeperCell {
@@ -344,7 +346,9 @@ impl MinesweeperCell {
             rel: 0,
             is_active: false,
             in_active_neighbourhood: false,
-            print_zero: false
+            print_zero: false,
+            is_marked: false,
+            mark_color: Color::Rgb(255, 42, 255),
         }
     }
 
@@ -414,17 +418,21 @@ impl MinesweeperCell {
         if self.is_active {
             Color::Rgb(255, 42, 255)
         } else {
-            if self.is_covered {
-                if self.in_active_neighbourhood {
-                    self.get_light_dark_color(Color::Rgb(128, 115, 128), Color::Rgb(89, 80, 89))
-                } else {
-                    self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
-                }
+            if self.is_marked {
+                self.mark_color
             } else {
-                if self.in_active_neighbourhood {
-                    self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
+                if self.is_covered {
+                    if self.in_active_neighbourhood {
+                        self.get_light_dark_color(Color::Rgb(128, 115, 128), Color::Rgb(89, 80, 89))
+                    } else {
+                        self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
+                    }
                 } else {
-                    self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
+                    if self.in_active_neighbourhood {
+                        self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
+                    } else {
+                        self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
+                    }
                 }
             }
         }
