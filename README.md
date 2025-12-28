@@ -18,30 +18,40 @@ In delta mode, each cell displays the amount of not yet flagged mines and 0, if 
 
 In sweep mode, whenever you flag a mine, it will be removed. Other than that, it is similar to delta mode. When switching to sweep mode, all already flagged mines will be removed. Falsely flagged cells will end the game.
 
+With marks you can visualise how many mines are in the area of influence. This is not meant to be used as a way to cheese the game, but rather to help one learn new tactics or for a beginner to get a better grasp on how 4D minesweeper works. The order in which you place marks is important! It can get a bit visually crowded when too many marks are placed, so remember to clear them. Marks overriding other marks is intended and should only happen if the amount of cells with that mark isn't fully enclosed by the newly placed mark
+
+
+https://github.com/user-attachments/assets/913b4012-a483-4150-baad-a219c09b202e
+
+
 ### Controls
 
 <pre>
-  Quit:                 ctrl+C, q, ESC
-  Controls:             c
-  Settings:             o
-  Move left in x:       Leftarrow, h
-  Move right in x:      Rightarrow, l
-  Move up in y:         Uparrow, k
-  Move down in y:       Downarrow, j
-  Move left in z:       a, ctrl+h
-  Move right in z:      d, ctrl+l
-  Move up in w:         w, ctrl+k
-  Move down in w:       s, ctrl+j
-  New game:             n
-  Find free cell:       f
-  Uncover cell:         SPACE
-  Give up/reveal field: g
-  Flag cell:            m, e
-  Flag cell chording:   M, E
-  Pause game:           p
-  Toggle info:          i
-  Toggle delta mode:    u
-  Toggle sweep mode:    U
+  Quit:                         ctrl+c, q, ESC
+  Controls:                     c
+  Settings:                     o
+  Move left in x:               Leftarrow, h
+  Move right in x:              Rightarrow, l
+  Move up in y:                 Uparrow, k
+  Move down in y:               Downarrow, j
+  Move left in z:               a, ctrl+h
+  Move right in z:              d, ctrl+l
+  Move up in w:                 w, ctrl+k
+  Move down in w:               s, ctrl+j
+  New game:                     n
+  Find free cell:               f
+  Uncover cell:                 SPACE
+  Give up/reveal field:         g
+  Flag cell:                    m, e
+  Flag cell chording:           M, E
+  Pause game:                   p
+  Toggle info:                  i
+  Toggle delta mode:            u
+  Toggle sweep mode:            U
+  Clear all marks:              ctrl+x
+  Flag obvious marked cells:    alt+x
+  Mark cell:                    x
+  Uncover obvious marked cells: X
 </pre>
 
 ## Compiling and running
