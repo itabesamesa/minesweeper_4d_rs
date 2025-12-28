@@ -1225,7 +1225,7 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
-                println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t");
+                println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
