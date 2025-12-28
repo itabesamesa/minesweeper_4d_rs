@@ -3,6 +3,7 @@ use std::{
     fmt,
     env,
     str,
+    time::{Duration, Instant},
 };
 use color_eyre::Result;
 use crossterm::{
@@ -482,7 +483,8 @@ struct MinesweeperField {
     delta_mode: bool,
     sweep_mode: bool,
     started: DateTime<Local>,
-    ended: DateTime<Local>,
+    duration: Duration,
+    //ended: DateTime<Local>,
     field: Vec<MinesweeperCell>
 }
 
@@ -559,7 +561,8 @@ impl MinesweeperField {
         self.sweep_mode = sweep_mode;
         self.area = self.dim.calc_area();
         self.started = Local::now();
-        self.ended = self.started;
+        self.duration = Duration::ZERO;
+        //self.ended = self.started;
         self.fill_field();
         self.set_active_cell(true);
         self.place_mines();
@@ -588,6 +591,7 @@ impl MinesweeperField {
         self.state = MinesweeperFieldState::New;
         self.uncovered_cells = 0;
         self.flagged_mines = 0;
+        self.duration = Duration::ZERO;
     }
 
     fn set_active_cell(&mut self, t: bool) {
@@ -935,6 +939,10 @@ impl MinesweeperField {
         self.started.format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
+    fn time_elapsed_str(&self) -> String {
+        format!("{:.3}", self.duration.as_secs_f32())
+    }
+
     fn state_str(&self) -> String {
         self.state.as_str().to_string()
     }
@@ -1052,6 +1060,7 @@ impl MinesweeperGame {
             ("Dimensions:".to_string(),      self.field.dim_str()),
             ("Location:".to_string(),        self.field.loc_str()),
             ("Started at:".to_string(),      self.field.started_str()),
+            ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
             ("Game state:".to_string(),      self.field.state_str())
         ]);
         self.controls = MinesweeperGame::get_controls();
@@ -1145,8 +1154,12 @@ impl MinesweeperGame {
         self.info.array[6].1 = self.field.started_str();
     }
 
+    fn update_info_time_elapsed(&mut self) {
+        self.info.array[7].1 = self.field.time_elapsed_str();
+    }
+
     fn update_info_state(&mut self) {
-        self.info.array[7].1 = self.field.state_str();
+        self.info.array[8].1 = self.field.state_str();
     }
 
     fn move_in_field(&mut self, f: impl Fn(&mut MinesweeperField)) {
@@ -1164,7 +1177,8 @@ impl MinesweeperGame {
         self.info.array[4].1 = self.field.dim_str();
         self.info.array[5].1 = self.field.loc_str();
         self.info.array[6].1 = self.field.started_str();
-        self.info.array[7].1 = self.field.state_str();
+        self.info.array[7].1 = self.field.time_elapsed_str();
+        self.info.array[8].1 = self.field.state_str();
     }
 
     fn apply_settings(&mut self) {
@@ -1297,7 +1311,12 @@ impl App {
         self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
+            let start = Instant::now();
             self.handle_crossterm_events()?;
+            if matches!(self.game.field.state, MinesweeperFieldState::Running) {
+                self.game.field.duration += start.elapsed();
+                self.game.update_info_time_elapsed();
+            }
         }
         Ok(())
     }
@@ -1344,12 +1363,14 @@ impl App {
     /// If your application needs to perform work in between handling events, you can use the
     /// [`event::poll`] function to check if there are any events available with a timeout.
     fn handle_crossterm_events(&mut self) -> Result<()> {
-        match event::read()? {
-            // it's important to check KeyEventKind::Press to avoid handling key release events
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
-            Event::Mouse(_) => {}
-            Event::Resize(width, height) => self.check_size(width, height, MinesweeperGameState::Running),
-            _ => {}
+        if event::poll(Duration::from_millis(250))? {
+            match event::read()? {
+                // it's important to check KeyEventKind::Press to avoid handling key release events
+                Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
+                Event::Mouse(_) => {}
+                Event::Resize(width, height) => self.check_size(width, height, MinesweeperGameState::Running),
+                _ => {}
+            }
         }
         Ok(())
     }

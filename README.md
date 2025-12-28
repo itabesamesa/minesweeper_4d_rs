@@ -4,7 +4,7 @@ This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one
 
 [Ratatui]: https://ratatui.rs
 
-![An example game](example_gameplay.png)
+![An example game](example_gameplay_v2.png)
 
 ## How to play
 
@@ -81,7 +81,7 @@ minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t
 
 - [x] Make swapping to and from delta_mode possible
 - [x] Fix 0 showing around newly flagged mines
-- [ ] Add timer _idk, kinda too lazy..._
+- [x] Add timer ~_idk, kinda too lazy..._~
 - [x] Fix win condition
 - [ ] ~~Make random seedable~~
 - [x] Add chording
