@@ -954,6 +954,7 @@ impl MinesweeperField {
 
     fn uncover_cell(&mut self, p: Point) {
         let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
+        eprintln!("{:#?}", cell);
         if !cell.is_flagged {
             if cell.is_covered {
                 cell.set_covered(false);
@@ -967,7 +968,11 @@ impl MinesweeperField {
                     }
                 } else {
                     if cell.abs == 0 {
-                        self.do_in_neighbourhood(p, |s, p| s.uncover_cell(p));
+                        self.do_in_neighbourhood(p, |s, p2| {
+                            if p2 != p  {
+                                s.uncover_cell(p2);
+                            }
+                        });
                     } else if cell.rel == 0 {
                         if self.delta_mode {
                             self.uncover_rel_cell(p);
