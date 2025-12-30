@@ -1445,7 +1445,7 @@ impl MinesweeperGame {
                 ("Move up:".to_string(),         "any up movement key".to_string()),
                 ("Move down:".to_string(),       "any down movement key".to_string()),
                 ("Increment value:".to_string(), "any right movement key, +".to_string()),
-                ("Decrement value:".to_string(), "any left movement key, -".to_string()),
+                ("Decrement value:".to_string(), "any left movement key,  -".to_string()),
                 ("0..9:".to_string(),            "edit value".to_string()),
                 ("Toggle on".to_string(),        "y, t".to_string()),
                 ("Toggle off".to_string(),       "n, f".to_string()),
