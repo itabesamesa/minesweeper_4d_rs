@@ -102,8 +102,11 @@ minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f
 Classic Minesweeper as a command... Weirdo...
 
 ```
-target/debug/minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f
+minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f
 ```
+
+> [!WARNING]
+> Uncovering is a bit buggy when not in delta_mode or for non 4D fields!
 
 ## TODO
 
