@@ -1587,6 +1587,7 @@ fn main() -> color_eyre::Result<()> {
     let mut show_info = true;
     let mut delta_mode = true;
     let mut sweep_mode = false;
+    let mut capture_mouse = false;
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
     while let Some(arg) = args.next() {
@@ -1605,10 +1606,11 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
-                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f");
+                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
-                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f");
+                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -c t");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
@@ -1667,6 +1669,15 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
+            "-c" | "--capture_mouse" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" => capture_mouse = true,
+                    "f" | "n" | "false" | "no" => capture_mouse = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
             &_ => {
                 panic!("Unrecognized option \"{arg}\"");
             }
@@ -1674,7 +1685,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse);
     ratatui::restore();
     result
 }
@@ -1686,6 +1697,7 @@ pub struct App {
     running: bool,
     game: MinesweeperGame,
     area: Rect,
+    capture_mouse: bool,
 }
 
 impl App {
@@ -1695,15 +1707,18 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool) -> Result<()> {
         self.running = true;
+        self.capture_mouse = capture_mouse;
         self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
-        execute!(
-            std::io::stdout(),
-            EnableBracketedPaste,
-            EnableFocusChange,
-            EnableMouseCapture
-        )?;
+        if capture_mouse {
+            execute!(
+                std::io::stdout(),
+                EnableBracketedPaste,
+                EnableFocusChange,
+                EnableMouseCapture
+            )?;
+        }
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             let start = Instant::now();
@@ -1713,12 +1728,14 @@ impl App {
                 self.game.update_info_time_elapsed();
             }
         }
-        execute!(
-            std::io::stdout(),
-            DisableBracketedPaste,
-            DisableFocusChange,
-            DisableMouseCapture
-        )?;
+        if capture_mouse {
+            execute!(
+                std::io::stdout(),
+                DisableBracketedPaste,
+                DisableFocusChange,
+                DisableMouseCapture
+            )?;
+        }
         Ok(())
     }
 
@@ -1769,7 +1786,7 @@ impl App {
             match event::read()? {
                 // it's important to check KeyEventKind::Press to avoid handling key release events
                 Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
-                Event::Mouse(mouse) => self.on_mouse_event(mouse),
+                Event::Mouse(mouse) if self.capture_mouse => self.on_mouse_event(mouse),
                 Event::Resize(width, height) => self.check_size(width, height, MinesweeperGameState::Running),
                 _ => {}
             }
@@ -1778,6 +1795,7 @@ impl App {
     }
 
     fn on_mouse_event(&mut self, mouse: MouseEvent) {
+        eprintln!("{:#?}", mouse);
         let (field_area, _) = self.game.game_area(self.area);
         if matches!(self.game.state, MinesweeperGameState::Running) && mouse.column >= field_area.x && mouse.column < field_area.x+field_area.width-1 && mouse.row >= field_area.y && mouse.row < field_area.y+field_area.height {
             let (x, y) = (mouse.column-field_area.x, mouse.row-field_area.y);

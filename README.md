@@ -24,6 +24,8 @@ With marks you can visualise how many mines are in the area of influence. This i
 https://github.com/user-attachments/assets/913b4012-a483-4150-baad-a219c09b202e
 
 
+When the program is run with `--capture_mouse t`, the cursor will track the mouse, left clicking will uncover a cell and right clicking with flag a cell. When the program crashes with capture_mouse on, you'll have to reset your terminal
+
 ### Controls
 
 <pre>
@@ -91,6 +93,7 @@ Run:
   -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
   -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
   -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
+  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)
 </pre>
 
 Default settings as a command
