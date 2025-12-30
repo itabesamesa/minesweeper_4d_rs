@@ -4,7 +4,7 @@ This is a [Ratatui] app and my 8th minesweeper variant, 7th multidimensional one
 
 [Ratatui]: https://ratatui.rs
 
-![An example game](example_gameplay_v2.png)
+![An example game](example_gameplay_v3.png)
 
 
 https://github.com/user-attachments/assets/d1e07569-e4ca-4f18-bfa0-eb96f0d7dc50
@@ -30,14 +30,22 @@ https://github.com/user-attachments/assets/913b4012-a483-4150-baad-a219c09b202e
   Quit:                         ctrl+c, q, ESC
   Controls:                     c
   Settings:                     o
-  Move left in x:               Leftarrow, h
+  Move left in x:               Leftarrow,  h
   Move right in x:              Rightarrow, l
-  Move up in y:                 Uparrow, k
-  Move down in y:               Downarrow, j
+  Move up in y:                 Uparrow,    k
+  Move down in y:               Downarrow,  j
   Move left in z:               a, ctrl+h
   Move right in z:              d, ctrl+l
   Move up in w:                 w, ctrl+k
   Move down in w:               s, ctrl+j
+  Move to start in x:           shift+Leftarrow,  H
+  Move to end in x:             shift+Rightarrow, L
+  Move to top in y:             shift+Uparrow,    K
+  Move to bottom in y:          shift+Downarrow,  J
+  Move to start in z:           A, alt+h
+  Move to end in z:             D, alt+l
+  Move to top in w:             W, alt+k
+  Move to bottom in w:          S, alt+j
   New game:                     n
   Find free cell:               f
   Uncover cell:                 SPACE
@@ -91,6 +99,12 @@ Default settings as a command
 minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f
 ```
 
+Classic Minesweeper as a command... Weirdo...
+
+```
+target/debug/minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f
+```
+
 ## TODO
 
 - [x] Make swapping to and from delta_mode possible
@@ -100,7 +114,8 @@ minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f
 - [ ] ~~Make random seedable~~
 - [x] Add chording
 - [x] Editable settings
-- [ ] Make Controls scrollable
+- [x] Make Controls scrollable _custom implementation instead of ratatui Scrollbar_
+- [ ] Make it possible to win when there are 0 mines
 
 ## License
 

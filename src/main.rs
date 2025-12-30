@@ -150,10 +150,13 @@ impl Point {
 #[derive(Clone, Debug, Default)]
 struct KeyValueList<T> {//T must implement to_string() method!
     pos: usize,
+    scroll_buffer: usize,
     highlight: bool,
     title: String,
-    constraint_len: u16,
-    array: Vec<(String, T)>
+    constraint_len_key: u16,
+    constraint_len_value: u16,
+    move_direction: bool,
+    array: Vec<(String, T)>,
 }
 
 impl<T: std::fmt::Display> Widget for KeyValueList<T> {
@@ -163,19 +166,40 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
             .style(Style::default().fg(Color::White))
             .title(self.title);
         let layout = Layout::horizontal([
-            Constraint::Length(self.constraint_len),
-            Constraint::Fill(1)
-        ]).split(block.inner(area));
-        block.render(area, buf);
-        Paragraph::new(
-            self.array.iter().enumerate().map(|x| {// i don't like this, but too much of a rust
-                                                   // noob to fix...
-                if self.highlight && x.0 == self.pos {
-                    Line::raw(x.1.0.clone()).style(Modifier::UNDERLINED)
+            Constraint::Length(self.constraint_len_key),
+            Constraint::Length(self.constraint_len_value),
+        ]).flex(Flex::SpaceBetween).split(block.inner(area));
+        let mut start = 0;
+        let mut end = self.array.len();
+        let offset = self.pos+self.scroll_buffer;
+        let height: usize = layout[0].height.into();
+        if self.array.len() > height {
+            end = if offset > self.array.len() {self.array.len()} else {offset};
+            if self.move_direction {
+                if height < end {
+                    start = end-height;
                 } else {
-                    Line::raw(x.1.0.clone())
+                    end = height;
                 }
-            }).collect::<Vec<ratatui::prelude::Line>>())
+            } else {
+                if end < height {
+                    end = height;
+                } else {
+                    start = end-height;
+                }
+            }
+        }
+        let tmp = self.array[start..end].into_iter().enumerate();
+        let (keys, values): (Vec<ratatui::prelude::Line>, Vec<ratatui::prelude::Line>) = if self.highlight {
+            tmp.map(|x| {
+                if x.0 == self.pos-start {
+                    (Line::raw(x.1.0.clone()).style(Modifier::UNDERLINED), Line::raw(format!("{}", x.1.1)).style(Modifier::UNDERLINED))
+                } else {
+                    (Line::raw(x.1.0.clone()), Line::raw(format!("{}", x.1.1)))
+                }
+            }).unzip()} else {tmp.map(|x| (Line::raw(x.1.0.clone()), Line::raw(format!("{}", x.1.1)))).unzip()};
+        block.render(area, buf);
+        Paragraph::new(keys)
             .style(Style::new().white())
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
@@ -183,43 +207,55 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
                 layout[0],
                 buf
             );
-        Paragraph::new(
-            self.array.iter().enumerate().map(|x| {// i don't like this, but too much of a rust
-                                                   // noob to fix...
-                if self.highlight && x.0 == self.pos {
-                    Line::raw(format!("{}", x.1.1)).style(Modifier::UNDERLINED)
-                } else {
-                    Line::raw(format!("{}", x.1.1))
-                }
-            }).collect::<Vec<ratatui::prelude::Line>>())
+        Paragraph::new(values)
             .style(Style::new().white())
-            .alignment(Alignment::Right)
+            .alignment(Alignment::Left)
             .wrap(Wrap { trim: true })
             .render(
                 layout[1],
                 buf
             );
+        if start != 0 {
+            buf.set_string(area.left(), area.top()+1, "🮧", Style::new().white());
+        }
+        if end != self.array.len() {
+            buf.set_string(area.left(), area.bottom()-2, "🮦", Style::new().white());
+        }
     }
 }
 
 impl<T: Len> KeyValueList<T> {
     fn new(highlight: bool, title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
-        let cl = array.iter().reduce(|a, b| if a.0.len() < b.0.len() {b} else {a}).unwrap().0.len() as u16;
         KeyValueList {
             pos: 0,
+            scroll_buffer: array.len()/2+1,
             highlight: highlight,
-            title: title,
-            constraint_len: cl,
+            title: title, // got frustrated... don't question the constraint_len stuff
+            constraint_len_key: array.iter().reduce(|a, b| {if a.0.len() < b.0.len() {b} else {a}}).unwrap().0.len() as u16,
+            constraint_len_value: array.iter().reduce(|a, b| {if a.1.len() < b.1.len() {b} else {a}}).unwrap().1.len() as u16,
+            move_direction: true,
             array: array
         }
     }
 
-    fn inc_pos(&mut self) {
+    fn inc_pos_wrap(&mut self) {
         self.pos = (self.pos+1)%self.array.len();
+        self.move_direction = true;
+    }
+
+    fn dec_pos_warp(&mut self) {
+        self.pos = (self.array.len()+self.pos-1)%self.array.len();
+        self.move_direction = false;
+    }
+
+    fn inc_pos(&mut self) {
+        if self.pos+1 != self.array.len() {self.pos += 1;}
+        self.move_direction = true;
     }
 
     fn dec_pos(&mut self) {
-        self.pos = (self.array.len()+self.pos-1)%self.array.len();
+        if self.pos != 0 {self.pos -= 1;}
+        self.move_direction = false;
     }
 
     fn get_tuple(&mut self) -> &mut (String, T) {
@@ -231,7 +267,8 @@ impl<T: Len> KeyValueList<T> {
 struct SettingsOption {
     enabled: bool,
     option_type: SettingsOptionTypes,
-    value: u16
+    value: u16,
+    gt_zero: bool,
 }
 
 impl fmt::Display for SettingsOption {
@@ -290,7 +327,7 @@ impl SettingsOption {
     fn inc(&mut self) {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
-            SettingsOptionTypes::Int => self.value += 1,
+            SettingsOptionTypes::Int => self.value = self.value.saturating_add(1),
             _ => {},
         }
     }
@@ -298,7 +335,13 @@ impl SettingsOption {
     fn dec(&mut self) {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
-            SettingsOptionTypes::Int => if self.value != 0 {self.value -= 1;},
+            SettingsOptionTypes::Int => {
+                if self.gt_zero && self.value == 1 {
+                    return;
+                } else if self.value != 0 {
+                    self.value -= 1;
+                }
+            },
             _ => {},
         }
     }
@@ -306,7 +349,7 @@ impl SettingsOption {
     fn append(&mut self, v: u16) {
         match self.option_type {
             SettingsOptionTypes::Bool => if v != 0 {self.value = 1;} else {self.value = 0;},
-            SettingsOptionTypes::Int => self.value = self.value.wrapping_mul(10).wrapping_add(v),
+            SettingsOptionTypes::Int => self.value = self.value.saturating_mul(10).saturating_add(v),
             //could do better, but too lazy
             _ => {},
         }
@@ -315,7 +358,12 @@ impl SettingsOption {
     fn del(&mut self) {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
-            SettingsOptionTypes::Int => self.value = self.value/10,
+            SettingsOptionTypes::Int => {
+                self.value = self.value/10;
+                if self.value == 0 && self.gt_zero {
+                    self.value = 1;
+                }
+            },
             _ => {},
         }
     }
@@ -773,12 +821,24 @@ impl MinesweeperField {
         }
     }
 
+    fn move_right_end_x(&mut self) {
+        self.set_active_cell(false);
+        self.loc.x = self.dim.x-1;
+        self.set_active_cell(true);
+    }
+
     fn move_right_z(&mut self) {
         if self.loc.z+1 < self.dim.z {
             self.set_active_cell(false);
             self.loc.z += 1;
             self.set_active_cell(true);
         }
+    }
+
+    fn move_right_end_z(&mut self) {
+        self.set_active_cell(false);
+        self.loc.z = self.dim.z-1;
+        self.set_active_cell(true);
     }
 
     fn move_left_x(&mut self) {
@@ -789,12 +849,24 @@ impl MinesweeperField {
         }
     }
 
+    fn move_left_end_x(&mut self) {
+        self.set_active_cell(false);
+        self.loc.x = 0;
+        self.set_active_cell(true);
+    }
+
     fn move_left_z(&mut self) {
         if self.loc.z-1 >= 0 {
             self.set_active_cell(false);
             self.loc.z -= 1;
             self.set_active_cell(true);
         }
+    }
+
+    fn move_left_end_z(&mut self) {
+        self.set_active_cell(false);
+        self.loc.z = 0;
+        self.set_active_cell(true);
     }
 
     fn move_down_y(&mut self) {
@@ -805,12 +877,24 @@ impl MinesweeperField {
         }
     }
 
+    fn move_down_end_y(&mut self) {
+        self.set_active_cell(false);
+        self.loc.y = self.dim.y-1;
+        self.set_active_cell(true);
+    }
+
     fn move_down_w(&mut self) {
         if self.loc.w+1 < self.dim.w {
             self.set_active_cell(false);
             self.loc.w += 1;
             self.set_active_cell(true);
         }
+    }
+
+    fn move_down_end_w(&mut self) {
+        self.set_active_cell(false);
+        self.loc.w = self.dim.w-1;
+        self.set_active_cell(true);
     }
 
     fn move_up_y(&mut self) {
@@ -821,12 +905,24 @@ impl MinesweeperField {
         }
     }
 
+    fn move_up_end_y(&mut self) {
+        self.set_active_cell(false);
+        self.loc.y = 0;
+        self.set_active_cell(true);
+    }
+
     fn move_up_w(&mut self) {
         if self.loc.w-1 >= 0 {
             self.set_active_cell(false);
             self.loc.w -= 1;
             self.set_active_cell(true);
         }
+    }
+
+    fn move_up_end_w(&mut self) {
+        self.set_active_cell(false);
+        self.loc.w = 0;
+        self.set_active_cell(true);
     }
 
     fn uncover_rel_cell(&mut self, p: Point) {
@@ -930,7 +1026,7 @@ impl MinesweeperField {
             if cell.is_covered {
                 if cell.is_bomb {
                     cell.set_bomb(false);
-                    self.uncover_cell(self.loc);
+                    self.uncover_cell(p);
                     self.do_in_neighbourhood(p, |s, p| {
                         let cell = s.cell_at(p).unwrap();
                         if cell.rel == cell.abs.try_into().unwrap() {
@@ -1271,7 +1367,8 @@ impl Widget for MinesweeperGame {
             },
             MinesweeperGameState::Controls => {
                 let height = self.controls.array.len()+2;
-                self.controls.render(centered_rect(area, 50, height.try_into().unwrap()), buf);
+                let width = self.controls.constraint_len_key+1+self.controls.constraint_len_value;
+                self.controls.render(centered_rect(area, width, height.try_into().unwrap()), buf);
             },
             MinesweeperGameState::Settings => {
                 let height = self.settings.0.array.len()+2;
@@ -1323,19 +1420,21 @@ impl MinesweeperGame {
             ("Started at:".to_string(),      self.field.started_str()),
             ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
             ("Game state:".to_string(),      self.field.state_str())
-        ]);
+        ]); // 12 cause it looks good... and plus 2 cause of borders
+        self.info_panel_min_width = self.info.constraint_len_key+3+self.info.constraint_len_value;
+        self.info_panel_max_width = self.info.constraint_len_key+12+self.info.constraint_len_value;
         self.controls = MinesweeperGame::get_controls();
         self.settings = (
             KeyValueList::new(true, "Game Settings".to_string(), vec![
-                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0}),
-                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16}),
-                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16}),
-                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16}),
-                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16}),
-                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines}),
-                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}}),
-                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}}),
-                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}}),
+                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, gt_zero: false}),
+                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16, gt_zero: true}),
+                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16, gt_zero: true}),
+                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16, gt_zero: true}),
+                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16, gt_zero: true}),
+                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines, gt_zero: true}), // gt_zero here is cause you can't win with zero mines?!?! que? wtf, idk
+                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}, gt_zero: false}),
+                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}, gt_zero: false}),
+                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}, gt_zero: false}),
                 //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
                 //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
             ]),
@@ -1343,31 +1442,37 @@ impl MinesweeperGame {
                 ("Exit".to_string(),             "ctrl+C, q, ESC".to_string()),
                 ("Controls:".to_string(),        "c".to_string()),
                 ("Save and exit".to_string(),    "o".to_string()),
-                ("Move up:".to_string(),         "Uparrow, k, w, ctrl+k".to_string()),
-                ("Move down:".to_string(),       "Downarrow, j, s, ctrl+j".to_string()),
-                ("Increment value:".to_string(), "Rightarrow, l, d, ctrl+l".to_string()),
-                ("Decrement value:".to_string(), "Leftarrow, h, a, ctrl+h".to_string()),
+                ("Move up:".to_string(),         "any up movement key".to_string()),
+                ("Move down:".to_string(),       "any down movement key".to_string()),
+                ("Increment value:".to_string(), "any right movement key, +".to_string()),
+                ("Decrement value:".to_string(), "any left movement key, -".to_string()),
                 ("0..9:".to_string(),            "edit value".to_string()),
                 ("Toggle on".to_string(),        "y, t".to_string()),
                 ("Toggle off".to_string(),       "n, f".to_string()),
         ]));
-        self.info_panel_min_width = 25;
-        self.info_panel_max_width = 50;
     }
 
     fn get_controls() -> KeyValueList<String> {
-        KeyValueList::new(false, "Game Controls".to_string(), vec![
+        KeyValueList::new(true, "Game Controls".to_string(), vec![
             ("Quit:".to_string(),                           "ctrl+c, q, ESC".to_string()),
             ("Controls:".to_string(),                       "c".to_string()),
             ("Settings:".to_string(),                       "o".to_string()),
-            ("Move left in x:".to_string(),                 "Leftarrow, h".to_string()),
+            ("Move left in x:".to_string(),                 "Leftarrow,  h".to_string()),
             ("Move right in x:".to_string(),                "Rightarrow, l".to_string()),
-            ("Move up in y:".to_string(),                   "Uparrow, k".to_string()),
-            ("Move down in y:".to_string(),                 "Downarrow, j".to_string()),
+            ("Move up in y:".to_string(),                   "Uparrow,    k".to_string()),
+            ("Move down in y:".to_string(),                 "Downarrow,  j".to_string()),
             ("Move left in z:".to_string(),                 "a, ctrl+h".to_string()),
             ("Move right in z:".to_string(),                "d, ctrl+l".to_string()),
             ("Move up in w:".to_string(),                   "w, ctrl+k".to_string()),
             ("Move down in w:".to_string(),                 "s, ctrl+j".to_string()),
+            ("Move to start in x:".to_string(),             "shift+Leftarrow,  H".to_string()),
+            ("Move to end in x:".to_string(),               "shift+Rightarrow, L".to_string()),
+            ("Move to top in y:".to_string(),               "shift+Uparrow,    K".to_string()),
+            ("Move to bottom in y:".to_string(),            "shift+Downarrow,  J".to_string()),
+            ("Move to start in z:".to_string(),             "A, alt+h".to_string()),
+            ("Move to end in z:".to_string(),               "D, alt+l".to_string()),
+            ("Move to top in w:".to_string(),               "W, alt+k".to_string()),
+            ("Move to bottom in w:".to_string(),            "S, alt+j".to_string()),
             ("New game:".to_string(),                       "n".to_string()),
             ("Find free cell:".to_string(),                 "f".to_string()),
             ("Uncover cell:".to_string(),                   "SPACE".to_string()),
@@ -1472,13 +1577,14 @@ fn main() -> color_eyre::Result<()> {
     let mut show_info = true;
     let mut delta_mode = true;
     let mut sweep_mode = false;
-    let mut args = env::args().skip(1);
+    let mut args = env::args();
+    let Some(program) = args.next() else {panic!("WTF?")};
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "-?" | "--help" => {
                 let controls = MinesweeperGame::get_controls();
                 println!("{}", controls.title);
-                let width = (controls.constraint_len+1) as usize;
+                let width = (controls.constraint_len_key+1) as usize;
                 for c in controls.array {
                     println!("  {}{}", format!("{:width$}", c.0), c.1);
                 }
@@ -1490,7 +1596,9 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
-                println!("  minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f");
+                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f");
+                println!("Classic Minesweeper as a command... Weirdo...");
+                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
@@ -1498,24 +1606,29 @@ fn main() -> color_eyre::Result<()> {
                     .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
                 dim.x = x.parse::<i16>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", x, arg).as_str());
+                if dim.x < 1 {panic!("Dimension values must be greater than 0");}
                 let y = args.next()
                     .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
                 dim.y = y.parse::<i16>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", y, arg).as_str());
+                if dim.y < 1 {panic!("Dimension values must be greater than 0");}
                 let z = args.next()
                     .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
                 dim.z = z.parse::<i16>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", z, arg).as_str());
+                if dim.z < 1 {panic!("Dimension values must be greater than 0");}
                 let w = args.next()
                     .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
                 dim.w = w.parse::<i16>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", w, arg).as_str());
+                if dim.w < 1 {panic!("Dimension values must be greater than 0");}
             },
             "-m" | "--mines" => {
                 let value = args.next()
                     .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
                 mines = value.parse::<u16>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", value, arg).as_str());
+                if mines == 0 {panic!("Amount of mines must be greater than 0");}
             },
             "-i" | "--show_info" => {
                 let v = args.next()
@@ -1657,14 +1770,22 @@ impl App {
                                 self.game.toggle_sweep_mode();
                                 if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
                             },
+                            (_, KeyCode::Char('A')) | (KeyModifiers::ALT, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_end_z()),
+                            (_, KeyCode::Char('D')) | (KeyModifiers::ALT, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_end_z()),
+                            (_, KeyCode::Char('W')) | (KeyModifiers::ALT, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_end_w()),
+                            (_, KeyCode::Char('S')) | (KeyModifiers::ALT, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_end_w()),
+                            (KeyModifiers::SHIFT, KeyCode::Left  | KeyCode::Char('H')) => self.game.move_in_field(|f| f.move_left_end_x()),
+                            (KeyModifiers::SHIFT, KeyCode::Right | KeyCode::Char('L')) => self.game.move_in_field(|f| f.move_right_end_x()),
+                            (KeyModifiers::SHIFT, KeyCode::Up    | KeyCode::Char('K')) => self.game.move_in_field(|f| f.move_up_end_y()),
+                            (KeyModifiers::SHIFT, KeyCode::Down  | KeyCode::Char('J')) => self.game.move_in_field(|f| f.move_down_end_y()),
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
                             (_, KeyCode::Char('s')) | (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_w()),
-                            (_, KeyCode::Left | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
+                            (_, KeyCode::Left  | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
                             (_, KeyCode::Right | KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_x()),
-                            (_, KeyCode::Up | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
-                            (_, KeyCode::Down | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
+                            (_, KeyCode::Up    | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
+                            (_, KeyCode::Down  | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
                             (_, KeyCode::Char('f')) => {
                                 self.game.field.state = MinesweeperFieldState::Running;
                                 self.game.field.find_free_cell();
@@ -1701,14 +1822,22 @@ impl App {
                                 self.game.toggle_sweep_mode();
                                 if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
                             },
+                            (_, KeyCode::Char('A')) | (KeyModifiers::ALT, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_end_z()),
+                            (_, KeyCode::Char('D')) | (KeyModifiers::ALT, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_end_z()),
+                            (_, KeyCode::Char('W')) | (KeyModifiers::ALT, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_end_w()),
+                            (_, KeyCode::Char('S')) | (KeyModifiers::ALT, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_end_w()),
+                            (KeyModifiers::SHIFT, KeyCode::Left  | KeyCode::Char('H')) => self.game.move_in_field(|f| f.move_left_end_x()),
+                            (KeyModifiers::SHIFT, KeyCode::Right | KeyCode::Char('L')) => self.game.move_in_field(|f| f.move_right_end_x()),
+                            (KeyModifiers::SHIFT, KeyCode::Up    | KeyCode::Char('K')) => self.game.move_in_field(|f| f.move_up_end_y()),
+                            (KeyModifiers::SHIFT, KeyCode::Down  | KeyCode::Char('J')) => self.game.move_in_field(|f| f.move_down_end_y()),
                             (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
                             (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
                             (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
                             (_, KeyCode::Char('s')) | (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_w()),
-                            (_, KeyCode::Left | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
+                            (_, KeyCode::Left  | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
                             (_, KeyCode::Right | KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_x()),
-                            (_, KeyCode::Up | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
-                            (_, KeyCode::Down | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
+                            (_, KeyCode::Up    | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
+                            (_, KeyCode::Down  | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
                             (_, KeyCode::Char('p')) => self.game.field.state = MinesweeperFieldState::Paused,
                             (_, KeyCode::Char(' ')) => {
                                 self.game.field.uncover_cell(self.game.field.loc);
@@ -1776,6 +1905,8 @@ impl App {
                     (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
                     (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                    (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.controls.dec_pos(),
+                    (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.controls.inc_pos(),
                     _ => {}
                 }
             },
@@ -1789,10 +1920,10 @@ impl App {
                         self.game.regenerate_field();
                         self.game.state = MinesweeperGameState::Running;
                     },
-                    (_, KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('a')) => self.game.settings.0.get_tuple().1.dec(),
-                    (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('d')) => self.game.settings.0.get_tuple().1.inc(),
-                    (_, KeyCode::Up | KeyCode::Char('k') | KeyCode::Char('w')) => self.game.settings.0.dec_pos(),
-                    (_, KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('s')) => self.game.settings.0.inc_pos(),
+                    (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => self.game.settings.0.get_tuple().1.dec(),
+                    (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Char('+')) => self.game.settings.0.get_tuple().1.inc(),
+                    (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.settings.0.dec_pos_warp(),
+                    (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.settings.0.inc_pos_wrap(),
                     (_, KeyCode::Char('0')) => self.game.settings.0.get_tuple().1.append(0),
                     (_, KeyCode::Char('1')) => self.game.settings.0.get_tuple().1.append(1),
                     (_, KeyCode::Char('2')) => self.game.settings.0.get_tuple().1.append(2),
