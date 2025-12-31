@@ -378,6 +378,18 @@ struct Mark {
     origin: Point,
 }
 
+impl Mark {
+    fn new() -> Mark {
+        Mark {
+            color: Color::Black,
+            total: 0,
+            amount: 0,
+            mines: 0,
+            origin: Point::new(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 struct MinesweeperCell {
     coord: Point,
@@ -406,13 +418,7 @@ impl MinesweeperCell {
             in_active_neighbourhood: false,
             print_zero: false,
             is_marked: false,
-            mark: Mark {
-                color: Color::Black,
-                total: 0,
-                amount: 0,
-                mines: 0,
-                origin: Point::new(),
-            },
+            mark: Mark::new(),
         }
     }
 
@@ -1009,7 +1015,17 @@ impl MinesweeperField {
                     //should still set print_zero when not in delta_mode to avoid graphical bugs when
                     //swapping between modes
                 } else {
-                    self.do_in_neighbourhood(p, |s, p| {
+                    self.do_in_neighbourhood(p, |s, p2| {
+                        if p2 != p  {
+                            let cell = s.cell_at(p2).unwrap();
+                            if cell.is_covered { // have to check here to make chording in non
+                                                 // delta_mode work, otherwise it's an endless
+                                                 // recrusive loop
+                                s.uncover_cell(p2);
+                            }
+                        }
+                    });
+                    /*self.do_in_neighbourhood(p, |s, p| {
                         let cell = s.cell_at(p).unwrap();
                         if !cell.is_flagged {
                             cell.set_covered(false);
@@ -1019,7 +1035,7 @@ impl MinesweeperField {
                                 }
                             }
                         }
-                    });
+                    });*/
                 }
             }
         }

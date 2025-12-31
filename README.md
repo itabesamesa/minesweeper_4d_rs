@@ -105,9 +105,6 @@ Classic Minesweeper as a command... Weirdo...
 minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f
 ```
 
-> [!WARNING]
-> Uncovering is a bit buggy when not in delta_mode or for non 4D fields!
-
 ## TODO
 
 - [x] Make swapping to and from delta_mode possible
