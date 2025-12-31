@@ -24,7 +24,7 @@ With marks you can visualise how many mines are in the area of influence. This i
 https://github.com/user-attachments/assets/913b4012-a483-4150-baad-a219c09b202e
 
 
-When the program is run with `--capture_mouse t`, the cursor will track the mouse, left clicking will uncover a cell and right clicking with flag a cell. When the program crashes with capture_mouse on, you'll have to reset your terminal (this is why it is off by default)
+When the program is run with `--capture_mouse t`, the cursor will track the mouse, left clicking will uncover a cell and right clicking will flag a cell. When the program crashes with capture_mouse on, you'll have to reset your terminal (this is why it is off by default)
 
 ### Controls
 
