@@ -8,7 +8,13 @@ use std::{
 };
 use color_eyre::Result;
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers}
+    event::{
+        self, Event,
+        KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
+        EnableBracketedPaste, EnableFocusChange, EnableMouseCapture, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,
+        MouseEvent, MouseEventKind, MouseButton,
+    },
+    execute,
 };
 use ratatui::{
     DefaultTerminal, Frame,
@@ -1356,14 +1362,7 @@ impl Widget for MinesweeperGame {
     fn render(self, area: Rect, buf: &mut Buffer) {
         match self.state {
             MinesweeperGameState::Running => {
-                let layout = Layout::horizontal([
-                    Constraint::Length(self.field.get_display_width().try_into().unwrap()),
-                    Constraint::Max(if self.show_info {self.info_panel_max_width} else {0})
-                ].into_iter()).flex(Flex::Center).split(area);
-                let field_area = center_vertical(
-                    layout[0],
-                    self.field.get_display_height().try_into().unwrap()
-                );
+                let (field_area, info_area) = self.game_area(area);
 
                 self.field.render(
                     field_area,
@@ -1372,7 +1371,7 @@ impl Widget for MinesweeperGame {
 
                 if self.show_info {
                     let height = self.info.array.len()+2;
-                    self.info.render(center_vertical(layout[1], height.try_into().unwrap()), buf);
+                    self.info.render(center_vertical(info_area, height.try_into().unwrap()), buf);
                 }
             },
             MinesweeperGameState::Controls => {
@@ -1579,6 +1578,17 @@ impl MinesweeperGame {
             eprintln!("no!");
         }*/
     }
+
+    fn game_area(&self, area: Rect) -> (Rect, Rect) {
+        let layout = Layout::horizontal([
+            Constraint::Length(self.field.get_display_width().try_into().unwrap()),
+            Constraint::Max(if self.show_info {self.info_panel_max_width} else {0})
+        ].into_iter()).flex(Flex::Center).split(area);
+        (center_vertical(
+            layout[0],
+            self.field.get_display_height().try_into().unwrap()
+        ), layout[1])
+    }
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -1587,6 +1597,7 @@ fn main() -> color_eyre::Result<()> {
     let mut show_info = true;
     let mut delta_mode = true;
     let mut sweep_mode = false;
+    let mut capture_mouse = false;
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
     while let Some(arg) = args.next() {
@@ -1605,10 +1616,11 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
                 println!("Default settings as a command");
-                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f");
+                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
-                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f");
+                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -c t");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
@@ -1667,6 +1679,15 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
+            "-c" | "--capture_mouse" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" => capture_mouse = true,
+                    "f" | "n" | "false" | "no" => capture_mouse = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
             &_ => {
                 panic!("Unrecognized option \"{arg}\"");
             }
@@ -1674,7 +1695,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse);
     ratatui::restore();
     result
 }
@@ -1685,6 +1706,8 @@ pub struct App {
     /// Is the application running?
     running: bool,
     game: MinesweeperGame,
+    area: Rect,
+    capture_mouse: bool,
 }
 
 impl App {
@@ -1694,9 +1717,18 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool) -> Result<()> {
         self.running = true;
+        self.capture_mouse = capture_mouse;
         self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
+        if capture_mouse {
+            execute!(
+                std::io::stdout(),
+                EnableBracketedPaste,
+                EnableFocusChange,
+                EnableMouseCapture
+            )?;
+        }
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             let start = Instant::now();
@@ -1705,6 +1737,14 @@ impl App {
                 self.game.field.duration += start.elapsed();
                 self.game.update_info_time_elapsed();
             }
+        }
+        if capture_mouse {
+            execute!(
+                std::io::stdout(),
+                DisableBracketedPaste,
+                DisableFocusChange,
+                DisableMouseCapture
+            )?;
         }
         Ok(())
     }
@@ -1727,6 +1767,7 @@ impl App {
             title,
             frame.area()
         );
+        self.area = area;
         self.check_size(area.width, area.height, self.game.state.clone());
         frame.render_widget(
             self.game.clone(),
@@ -1755,12 +1796,76 @@ impl App {
             match event::read()? {
                 // it's important to check KeyEventKind::Press to avoid handling key release events
                 Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
-                Event::Mouse(_) => {}
+                Event::Mouse(mouse) if self.capture_mouse => self.on_mouse_event(mouse),
                 Event::Resize(width, height) => self.check_size(width, height, MinesweeperGameState::Running),
                 _ => {}
             }
         }
         Ok(())
+    }
+
+    fn on_mouse_event(&mut self, mouse: MouseEvent) {
+        let (field_area, _) = self.game.game_area(self.area);
+        if matches!(self.game.state, MinesweeperGameState::Running) && mouse.column >= field_area.x && mouse.column < field_area.x+field_area.width-1 && mouse.row >= field_area.y && mouse.row < field_area.y+field_area.height {
+            let (x, y) = (mouse.column-field_area.x, mouse.row-field_area.y);
+            let loc = Point {
+                x: (x as i16/2)%(self.game.field.dim.x+1),
+                y: y as i16%(self.game.field.dim.y+1),
+                z: (x as i16/2)/(self.game.field.dim.x+1),
+                w: y as i16/(self.game.field.dim.y+1),
+            };
+            if loc.x < self.game.field.dim.x && loc.y < self.game.field.dim.y && loc.z < self.game.field.dim.z && loc.w < self.game.field.dim.w {
+                match self.game.field.state {
+                    MinesweeperFieldState::New => {
+                        match mouse.kind {
+                            MouseEventKind::Moved => {
+                                self.game.field.set_active_cell(false);
+                                self.game.field.loc = loc;
+                                self.game.field.set_active_cell(true);
+                            },
+                            MouseEventKind::Down(button) => {
+                                match button {
+                                    MouseButton::Left => {
+                                        self.game.field.state = MinesweeperFieldState::Running;
+                                        self.game.field.uncover_cell(self.game.field.loc);
+                                        self.game.field.started = Local::now();
+                                        self.game.update_info_cells_uncovered();
+                                        self.game.update_info_started();
+                                    },
+                                    _ => {},
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    MinesweeperFieldState::Running | MinesweeperFieldState::RevealField => {
+                        match mouse.kind {
+                            MouseEventKind::Moved => {
+                                self.game.field.set_active_cell(false);
+                                self.game.field.loc = loc;
+                                self.game.field.set_active_cell(true);
+                            },
+                            MouseEventKind::Down(button) => {
+                                match button {
+                                    MouseButton::Left => {
+                                        self.game.field.uncover_cell(self.game.field.loc);
+                                        self.game.update_info_cells_uncovered();
+                                    },
+                                    MouseButton::Right => {
+                                        self.game.field.toggle_flagged(self.game.field.loc);
+                                        self.game.update_info_mines_flagged();
+                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                    }
+                                    _ => {},
+                                }
+                            },
+                            _ => {},
+                        }
+                    },
+                    _ => {},
+                }
+            }
+        }
     }
 
     /// Handles the key events and updates the state of [`App`].
