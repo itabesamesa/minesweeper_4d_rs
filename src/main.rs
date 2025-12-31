@@ -637,11 +637,12 @@ impl Widget for MinesweeperField {
                 || matches!(self.state, MinesweeperFieldState::GaveUp)
                 || matches!(self.state, MinesweeperFieldState::Won) {
                 let mut message_box = centered_rect(area, 18, 3);
-                message_box.x -= 1;
-                let text = vec![
-                    self.state.as_str().into()
-                ];
-                Paragraph::new(text)
+                buf.set_string(message_box.left(), message_box.top(), "                 ", Style::new());
+                buf.set_string(message_box.left(), message_box.top()+1, "                 ", Style::new());
+                buf.set_string(message_box.left(), message_box.top()+2, "                 ", Style::new());
+                // to prevent a display bug, where numbers are rendered ontop of the message_box
+                if (message_box.left()-area.left())%2 == 1 {message_box.x -= 1;}
+                Paragraph::new(format!("{}", self.state.as_str()))
                     .block(Block::bordered())
                     .style(Style::new().white().bg(Color::Rgb(38, 38, 38)))
                     .alignment(Alignment::Center)
