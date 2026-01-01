@@ -528,7 +528,9 @@ impl MinesweeperCell {
                     self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
                 }
             } else {
-                if self.in_active_neighbourhood {
+                if self.is_flagged && !self.is_bomb {
+                    Color::Red
+                } else if self.in_active_neighbourhood {
                     self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
                 } else {
                     self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
