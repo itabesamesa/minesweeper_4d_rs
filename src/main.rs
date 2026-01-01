@@ -249,7 +249,7 @@ impl<T: Len> KeyValueList<T> {
         self.move_direction = true;
     }
 
-    fn dec_pos_warp(&mut self) {
+    fn dec_pos_wrap(&mut self) {
         self.pos = (self.array.len()+self.pos-1)%self.array.len();
         self.move_direction = false;
     }
@@ -1808,65 +1808,86 @@ impl App {
 
     fn on_mouse_event(&mut self, mouse: MouseEvent) {
         let (field_area, _) = self.game.game_area(self.area);
-        if matches!(self.game.state, MinesweeperGameState::Running) && mouse.column >= field_area.x && mouse.column < field_area.x+field_area.width-1 && mouse.row >= field_area.y && mouse.row < field_area.y+field_area.height {
-            let (x, y) = (mouse.column-field_area.x, mouse.row-field_area.y);
-            let loc = Point {
-                x: (x as i16/2)%(self.game.field.dim.x+1),
-                y: y as i16%(self.game.field.dim.y+1),
-                z: (x as i16/2)/(self.game.field.dim.x+1),
-                w: y as i16/(self.game.field.dim.y+1),
-            };
-            if loc.x < self.game.field.dim.x && loc.y < self.game.field.dim.y && loc.z < self.game.field.dim.z && loc.w < self.game.field.dim.w {
-                match self.game.field.state {
-                    MinesweeperFieldState::New => {
-                        match mouse.kind {
-                            MouseEventKind::Moved => {
-                                self.game.field.set_active_cell(false);
-                                self.game.field.loc = loc;
-                                self.game.field.set_active_cell(true);
+        match self.game.state {
+            MinesweeperGameState::Running => {
+                if mouse.column >= field_area.x && mouse.column < field_area.x+field_area.width-1 && mouse.row >= field_area.y && mouse.row < field_area.y+field_area.height {
+                    let (x, y) = (mouse.column-field_area.x, mouse.row-field_area.y);
+                    let loc = Point {
+                        x: (x as i16/2)%(self.game.field.dim.x+1),
+                        y: y as i16%(self.game.field.dim.y+1),
+                        z: (x as i16/2)/(self.game.field.dim.x+1),
+                        w: y as i16/(self.game.field.dim.y+1),
+                    };
+                    if loc.x < self.game.field.dim.x && loc.y < self.game.field.dim.y && loc.z < self.game.field.dim.z && loc.w < self.game.field.dim.w {
+                        match self.game.field.state {
+                            MinesweeperFieldState::New => {
+                                match mouse.kind {
+                                    MouseEventKind::Moved => {
+                                        self.game.field.set_active_cell(false);
+                                        self.game.field.loc = loc;
+                                        self.game.field.set_active_cell(true);
+                                    },
+                                    MouseEventKind::Down(button) => {
+                                        match button {
+                                            MouseButton::Left => {
+                                                self.game.field.state = MinesweeperFieldState::Running;
+                                                self.game.field.uncover_cell(self.game.field.loc);
+                                                self.game.field.started = Local::now();
+                                                self.game.update_info_cells_uncovered();
+                                                self.game.update_info_started();
+                                            },
+                                            _ => {},
+                                        }
+                                    },
+                                    _ => {},
+                                }
                             },
-                            MouseEventKind::Down(button) => {
-                                match button {
-                                    MouseButton::Left => {
-                                        self.game.field.state = MinesweeperFieldState::Running;
-                                        self.game.field.uncover_cell(self.game.field.loc);
-                                        self.game.field.started = Local::now();
-                                        self.game.update_info_cells_uncovered();
-                                        self.game.update_info_started();
+                            MinesweeperFieldState::Running | MinesweeperFieldState::RevealField => {
+                                match mouse.kind {
+                                    MouseEventKind::Moved => {
+                                        self.game.field.set_active_cell(false);
+                                        self.game.field.loc = loc;
+                                        self.game.field.set_active_cell(true);
+                                    },
+                                    MouseEventKind::Down(button) => {
+                                        match button {
+                                            MouseButton::Left => {
+                                                self.game.field.uncover_cell(self.game.field.loc);
+                                                self.game.update_info_cells_uncovered();
+                                            },
+                                            MouseButton::Right => {
+                                                self.game.field.toggle_flagged(self.game.field.loc);
+                                                self.game.update_info_mines_flagged();
+                                                if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                            }
+                                            _ => {},
+                                        }
                                     },
                                     _ => {},
                                 }
                             },
                             _ => {},
                         }
-                    },
-                    MinesweeperFieldState::Running | MinesweeperFieldState::RevealField => {
-                        match mouse.kind {
-                            MouseEventKind::Moved => {
-                                self.game.field.set_active_cell(false);
-                                self.game.field.loc = loc;
-                                self.game.field.set_active_cell(true);
-                            },
-                            MouseEventKind::Down(button) => {
-                                match button {
-                                    MouseButton::Left => {
-                                        self.game.field.uncover_cell(self.game.field.loc);
-                                        self.game.update_info_cells_uncovered();
-                                    },
-                                    MouseButton::Right => {
-                                        self.game.field.toggle_flagged(self.game.field.loc);
-                                        self.game.update_info_mines_flagged();
-                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
-                                    }
-                                    _ => {},
-                                }
-                            },
-                            _ => {},
-                        }
-                    },
-                    _ => {},
+                    }
                 }
-            }
+            },
+            MinesweeperGameState::Controls => {
+                match mouse.kind {
+                    MouseEventKind::ScrollUp => self.game.controls.dec_pos(),
+                    MouseEventKind::ScrollDown => self.game.controls.inc_pos(),
+                    _ => {}
+                }
+            },
+            MinesweeperGameState::Settings => {
+                match mouse.kind {
+                    MouseEventKind::ScrollUp => self.game.settings.0.inc_pos_wrap(),
+                    MouseEventKind::ScrollDown => self.game.settings.0.dec_pos_wrap(),
+                    MouseEventKind::ScrollRight => self.game.settings.0.get_tuple().1.inc(),
+                    MouseEventKind::ScrollLeft => self.game.settings.0.get_tuple().1.dec(),
+                    _ => {}
+                }
+            },
+            _ => {}
         }
     }
 
@@ -2039,7 +2060,7 @@ impl App {
                     },
                     (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => self.game.settings.0.get_tuple().1.dec(),
                     (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Char('+')) => self.game.settings.0.get_tuple().1.inc(),
-                    (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.settings.0.dec_pos_warp(),
+                    (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.settings.0.dec_pos_wrap(),
                     (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.settings.0.inc_pos_wrap(),
                     (_, KeyCode::Char('0')) => self.game.settings.0.get_tuple().1.append(0),
                     (_, KeyCode::Char('1')) => self.game.settings.0.get_tuple().1.append(1),
