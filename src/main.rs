@@ -5,6 +5,8 @@ use std::{
     str,
     time::{Duration, Instant},
     collections::HashMap,
+    fs::File,
+    io::Write,
 };
 use color_eyre::Result;
 use crossterm::{
@@ -230,7 +232,7 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
     }
 }
 
-impl<T: Len> KeyValueList<T> {
+impl<T: Len + std::fmt::Display> KeyValueList<T> {
     fn new(highlight: bool, title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
         KeyValueList {
             pos: 0,
@@ -266,6 +268,15 @@ impl<T: Len> KeyValueList<T> {
 
     fn get_tuple(&mut self) -> &mut (String, T) {
         &mut self.array[self.pos]
+    }
+
+    fn as_str(&self, padding: usize) -> String {
+        let width = (self.constraint_len_key+1) as usize;
+        let mut s = String::new();
+        for c in &self.array {
+            s.push_str(&format!("{: <padding$}{:width$}{}\n", "", c.0, c.1));
+        }
+        s
     }
 }
 
@@ -581,6 +592,14 @@ impl MinesweeperCell {
         self.is_marked = false;
         self.mark.color = Color::Black;
         self.mark.mines = 0;
+    }
+
+    fn as_str(&self) -> String {
+        format!("({} {} {})", ((((if self.is_bomb {1} else {0}) << 1) +
+                if self.is_covered {1} else {0}) << 1) +
+                if self.is_flagged {1} else {0},
+                self.abs,
+                self.rel)
     }
 }
 
@@ -1321,6 +1340,25 @@ impl MinesweeperField {
     fn state_str(&self) -> String {
         self.state.as_str().to_string()
     }
+
+    fn field_str(&self) -> String {
+        let mut s = String::new();
+        for w in 0..self.dim.w {
+            for y in 0..self.dim.y {
+                for z in 0..self.dim.z {
+                    for x in 0..self.dim.x {
+                        let coord = Point {x: x, y: y, z: z, w: w};
+                        let cell = self.field[coord.to_1d(self.dim)];
+                        s.push_str(&cell.as_str());
+                    }
+                    s.push_str(" | ");
+                }
+                s.push_str("\n");
+            }
+            s.push_str("---\n");
+        }
+        s
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -1591,6 +1629,23 @@ impl MinesweeperGame {
             self.field.get_display_height().try_into().unwrap()
         ), layout[1])
     }
+
+    fn save_game(&self) {
+        let file_name = self.field.started_str().replace(" ", "_");
+        let mut file = File::create(format!("{}.4dminesweeper", file_name));
+        file.expect("couldn't create file, will fix this later...").write_all(
+            format!(
+            "Save file for game run on {}\n
+Info:
+{}
+
+Grid:
+{}",
+                self.field.started_str(),
+                self.info.as_str(0),
+                self.field.field_str()).as_bytes()
+            );
+    }
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -1608,9 +1663,10 @@ fn main() -> color_eyre::Result<()> {
                 let controls = MinesweeperGame::get_controls();
                 println!("{}", controls.title);
                 let width = (controls.constraint_len_key+1) as usize;
-                for c in controls.array {
+                /*for c in controls.array {
                     println!("  {}{}", format!("{:width$}", c.0), c.1);
-                }
+                }*/
+                print!("{}", controls.as_str(2));
                 println!("Commandline arguments");
                 println!("  -h, -?, --help            Show this menu");
                 println!("  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4");
@@ -1900,6 +1956,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
@@ -1945,6 +2002,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
                             (_, KeyCode::Char('c')) => {
                                 self.game.field.state = MinesweeperFieldState::Paused;
                                 self.game.state = MinesweeperGameState::Controls;
@@ -2011,6 +2069,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('g'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::RevealField,
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
@@ -2027,6 +2086,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('p'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::Running,
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
