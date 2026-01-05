@@ -31,7 +31,7 @@ use rand::{
     Rng, //SeedableRng,
     rngs::ThreadRng
 };
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 //use rand_chacha::ChaCha20Rng;
 //ChaCha20Rng doesn't implement Default, gonna have to find somthing else
@@ -57,6 +57,18 @@ impl MinesweeperFieldState {
             MinesweeperFieldState::GaveUp => "Game Capitulated",
             MinesweeperFieldState::RevealField => "Revealed Game",
             MinesweeperFieldState::Won => "Game Won",
+        }
+    }
+
+    fn from_str(s: &str) -> Option<MinesweeperFieldState> {
+        match s {
+            "New Game" => Some(MinesweeperFieldState::New),
+            "Game Running" => Some(MinesweeperFieldState::Running),
+            "Game Paused" => Some(MinesweeperFieldState::ClickedMine),
+            "Game Capitulated" => Some(MinesweeperFieldState::GaveUp),
+            "Revealed Game" => Some(MinesweeperFieldState::RevealField),
+            "Won" => Some(MinesweeperFieldState::Won),
+            _ => None,
         }
     }
 }
@@ -1361,7 +1373,7 @@ impl MinesweeperField {
                     s.push_str(" | ");
                 }
                 s.truncate(s.len()-3);
-                s.push_str("\n");
+                s.push('\n');
             }
             if w+1 != self.dim.w {
                 s.push_str(&w_bar);
@@ -1672,41 +1684,106 @@ Grid:
             if line.starts_with(&info.array[0].0) {
                 let (_, mut end) = line.split_at(info.array[0].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                match end {
+                    "On" => self.field.delta_mode = true,
+                    "Off" => self.field.delta_mode = false,
+                    _ => panic!("Wrong value for delta mode in file \"{}\"", file_name),
+                }
             } else if line.starts_with(&info.array[1].0) {
                 let (_, mut end) = line.split_at(info.array[1].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                match end {
+                    "On" => self.field.sweep_mode = true,
+                    "Off" => self.field.sweep_mode = false,
+                    _ => panic!("Wrong value for sweep mode in file \"{}\"", file_name),
+                }
             } else if line.starts_with(&info.array[2].0) {
                 let (_, mut end) = line.split_at(info.array[2].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                let v: Vec<_> = end.split('/').collect();
+                if v.len() != 2 {
+                    panic!("Wrong value for cells uncovered in file \"{}\"", file_name);
+                }
+                self.field.uncovered_cells = v[0].parse::<u16>()
+                    .expect(format!("Cells uncovered has wrong type in file \"{}\"", file_name).as_str());
             } else if line.starts_with(&info.array[3].0) {
                 let (_, mut end) = line.split_at(info.array[3].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                let v: Vec<_> = end.split('/').collect();
+                if v.len() != 2 {
+                    panic!("Wrong value for mines flagged in file \"{}\"", file_name);
+                }
+                self.field.flagged_mines = v[0].parse::<u16>()
+                    .expect(format!("Mines flagged has wrong type in file \"{}\"", file_name).as_str());
+                self.field.mines = v[1].parse::<u16>()
+                    .expect(format!("Mines flagged has wrong type in file \"{}\"", file_name).as_str());
             } else if line.starts_with(&info.array[4].0) {
                 let (_, mut end) = line.split_at(info.array[4].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                let v: Vec<_> = end.split(' ').collect();
+                if v.len() != 4 {
+                    panic!("Wrong value for dimensions in file \"{}\"", file_name);
+                }
+                self.field.dim.x = v[0].parse::<i16>()
+                    .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
+                if self.field.dim.x < 1 {panic!("Dimension values must be greater than 0");}
+                self.field.dim.y = v[1].parse::<i16>()
+                    .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
+                if self.field.dim.y < 1 {panic!("Dimension values must be greater than 0");}
+                self.field.dim.z = v[2].parse::<i16>()
+                    .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
+                if self.field.dim.z < 1 {panic!("Dimension values must be greater than 0");}
+                self.field.dim.w = v[3].parse::<i16>()
+                    .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
+                if self.field.dim.w < 1 {panic!("Dimension values must be greater than 0");}
             } else if line.starts_with(&info.array[5].0) {
                 let (_, mut end) = line.split_at(info.array[5].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                let v: Vec<_> = end.split(' ').collect();
+                if v.len() != 4 {
+                    panic!("Wrong value for dimensions in file \"{}\"", file_name);
+                }
+                self.field.loc.x = v[0].parse::<i16>()
+                    .expect(format!("Location has wrong type in file \"{}\"", file_name).as_str());
+                self.field.loc.y = v[1].parse::<i16>()
+                    .expect(format!("Location has wrong type in file \"{}\"", file_name).as_str());
+                self.field.loc.z = v[2].parse::<i16>()
+                    .expect(format!("Location has wrong type in file \"{}\"", file_name).as_str());
+                self.field.loc.w = v[3].parse::<i16>()
+                    .expect(format!("Location has wrong type in file \"{}\"", file_name).as_str());
             } else if line.starts_with(&info.array[6].0) {
                 let (_, mut end) = line.split_at(info.array[6].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                let mut date_str = end.to_owned();
+                date_str.push_str(" +0000");
+                let offset_in_sec = Local::now()
+                    .offset()
+                    .local_minus_utc();
+                match DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z") {
+                    Ok(date) => self.field.started = <DateTime<FixedOffset> as Into<DateTime<Local>>>::into(date) + Duration::from_secs(offset_in_sec.try_into().unwrap()),
+                    _ => panic!("Started has wrong format in file \"{}\"", file_name)
+                } // couldn't find a better way to make it respect local time, sooo yeah
             } else if line.starts_with(&info.array[7].0) {
                 let (_, mut end) = line.split_at(info.array[7].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                match Duration::try_from_secs_f32(end.parse::<f32>()
+                    .expect(format!("Duration has wrong type in file \"{}\"", file_name).as_str())) {
+                    Ok(dur) => self.field.duration = dur,
+                    Err(e) => panic!("{}", e),
+                } // i like the error message here tho :3
             } else if line.starts_with(&info.array[8].0) {
                 let (_, mut end) = line.split_at(info.array[8].0.len());
                 end = end.trim();
-                eprintln!("{}", end);
+                match MinesweeperFieldState::from_str(end) {
+                    Some(state) => self.field.state = state,
+                    None => panic!("Invalid game state in file \"{}\"", file_name),
+                }
             }
         }
+        if self.field.loc.x < 0 || self.field.loc.x >= self.field.dim.x {panic!("Location values must be greater than 0 and smaller than dimensions");}
+        if self.field.loc.y < 0 || self.field.loc.x >= self.field.dim.y {panic!("Location values must be greater than 0 and smaller than dimensions");}
+        if self.field.loc.z < 0 || self.field.loc.x >= self.field.dim.z {panic!("Location values must be greater than 0 and smaller than dimensions");}
+        if self.field.loc.w < 0 || self.field.loc.x >= self.field.dim.w {panic!("Location values must be greater than 0 and smaller than dimensions");}
         panic!("uwu");
     }
 }
@@ -1736,10 +1813,10 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -h, -?, --help            Show this menu");
                 println!("  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4");
                 println!("  -m, --mines               Change amount of mines. An unsigned integer");
-                println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
-                println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
-                println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
-                println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no (any capitalisation)");
+                println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("Default settings as a command");
                 println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
@@ -1779,8 +1856,8 @@ fn main() -> color_eyre::Result<()> {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
                 match v.to_lowercase().as_str() {
-                    "t" | "y" | "true" | "yes" => show_info = true,
-                    "f" | "n" | "false" | "no" => show_info = false,
+                    "t" | "y" | "true" | "yes" | "on" => show_info = true,
+                    "f" | "n" | "false" | "no" | "off" => show_info = false,
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
@@ -1788,8 +1865,8 @@ fn main() -> color_eyre::Result<()> {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
                 match v.to_lowercase().as_str() {
-                    "t" | "y" | "true" | "yes" => delta_mode = true,
-                    "f" | "n" | "false" | "no" => delta_mode = false,
+                    "t" | "y" | "true" | "yes" | "on" => delta_mode = true,
+                    "f" | "n" | "false" | "no" | "off" => delta_mode = false,
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
@@ -1797,8 +1874,8 @@ fn main() -> color_eyre::Result<()> {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
                 match v.to_lowercase().as_str() {
-                    "t" | "y" | "true" | "yes" => sweep_mode = true,
-                    "f" | "n" | "false" | "no" => sweep_mode = false,
+                    "t" | "y" | "true" | "yes" | "on" => sweep_mode = true,
+                    "f" | "n" | "false" | "no" | "off" => sweep_mode = false,
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
@@ -1806,8 +1883,8 @@ fn main() -> color_eyre::Result<()> {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
                 match v.to_lowercase().as_str() {
-                    "t" | "y" | "true" | "yes" => capture_mouse = true,
-                    "f" | "n" | "false" | "no" => capture_mouse = false,
+                    "t" | "y" | "true" | "yes" | "on" => capture_mouse = true,
+                    "f" | "n" | "false" | "no" | "off" => capture_mouse = false,
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
