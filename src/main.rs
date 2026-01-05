@@ -608,9 +608,11 @@ impl MinesweeperCell {
     }
 
     fn as_str(&self) -> String {
-        format!("({:03} {:03} {:03})", ((((if self.is_bomb {1} else {0}) << 1) +
-                if self.is_covered {1} else {0}) << 1) +
-                if self.is_flagged {1} else {0},
+        format!("({:03} {:03} {:03})", ((((((
+                            if self.print_zero {1} else {0}) << 1) +
+                            if self.is_bomb {1} else {0}) << 1) +
+                            if self.is_covered {1} else {0}) << 1) +
+                            if self.is_flagged {1} else {0},
                 self.abs,
                 self.rel)
     }
@@ -1480,36 +1482,15 @@ impl MinesweeperGame {
         self.field.init(dim, mines, delta_mode, sweep_mode);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
+        self.set_info();
+        self.controls = MinesweeperGame::get_controls();
+        self.settings = self.get_settings();
+    }
+
+    fn set_info(&mut self) {
         self.info = self.get_info(); // 12 cause it looks good... and plus 2 cause of borders
         self.info_panel_min_width = self.info.constraint_len_key+3+self.info.constraint_len_value;
         self.info_panel_max_width = self.info.constraint_len_key+12+self.info.constraint_len_value;
-        self.controls = MinesweeperGame::get_controls();
-        self.settings = (
-            KeyValueList::new(true, "Game Settings".to_string(), vec![
-                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, gt_zero: false}),
-                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16, gt_zero: true}),
-                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16, gt_zero: true}),
-                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16, gt_zero: true}),
-                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16, gt_zero: true}),
-                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines, gt_zero: true}), // gt_zero here is cause you can't win with zero mines?!?! que? wtf, idk
-                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}, gt_zero: false}),
-                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}, gt_zero: false}),
-                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}, gt_zero: false}),
-                //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
-                //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
-            ]),
-            KeyValueList::new(false, "Settings Controls".to_string(), vec![
-                ("Exit".to_string(),             "ctrl+C, q, ESC".to_string()),
-                ("Controls:".to_string(),        "c".to_string()),
-                ("Save and exit".to_string(),    "o".to_string()),
-                ("Move up:".to_string(),         "any up movement key".to_string()),
-                ("Move down:".to_string(),       "any down movement key".to_string()),
-                ("Increment value:".to_string(), "any right movement key, +".to_string()),
-                ("Decrement value:".to_string(), "any left movement key,  -".to_string()),
-                ("0..9:".to_string(),            "edit value".to_string()),
-                ("Toggle on".to_string(),        "y, t".to_string()),
-                ("Toggle off".to_string(),       "n, f".to_string()),
-        ]));
     }
 
     fn get_controls() -> KeyValueList<String> {
@@ -1563,6 +1544,35 @@ impl MinesweeperGame {
             ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
             ("Game state:".to_string(),      self.field.state_str())
         ])
+    }
+
+    fn get_settings(&self) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
+        (
+            KeyValueList::new(true, "Game Settings".to_string(), vec![
+                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, gt_zero: false}),
+                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16, gt_zero: true}),
+                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16, gt_zero: true}),
+                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16, gt_zero: true}),
+                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16, gt_zero: true}),
+                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines, gt_zero: true}), // gt_zero here is cause you can't win with zero mines?!?! que? wtf, idk
+                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}, gt_zero: false}),
+                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}, gt_zero: false}),
+                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}, gt_zero: false}),
+                //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
+                //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
+            ]),
+            KeyValueList::new(false, "Settings Controls".to_string(), vec![
+                ("Exit".to_string(),             "ctrl+C, q, ESC".to_string()),
+                ("Controls:".to_string(),        "c".to_string()),
+                ("Save and exit".to_string(),    "o".to_string()),
+                ("Move up:".to_string(),         "any up movement key".to_string()),
+                ("Move down:".to_string(),       "any down movement key".to_string()),
+                ("Increment value:".to_string(), "any right movement key, +".to_string()),
+                ("Decrement value:".to_string(), "any left movement key,  -".to_string()),
+                ("0..9:".to_string(),            "edit value".to_string()),
+                ("Toggle on".to_string(),        "y, t".to_string()),
+                ("Toggle off".to_string(),       "n, f".to_string()),
+        ]))
     }
 
     fn toggle_delta_mode(&mut self) {
@@ -1672,7 +1682,7 @@ Grid:
             );
     }
 
-    fn load_file(&mut self, file_name: String) {
+    fn load_file(&mut self, file_name: String, show_info: bool) {
         eprintln!("{}", file_name);
         let path = Path::new(&file_name);
         if !(path.exists() && path.is_file()) {
@@ -1764,7 +1774,7 @@ Grid:
                     .offset()
                     .local_minus_utc();
                 match DateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S %z") {
-                    Ok(date) => self.field.started = <DateTime<FixedOffset> as Into<DateTime<Local>>>::into(date) + Duration::from_secs(offset_in_sec.try_into().unwrap()),
+                    Ok(date) => self.field.started = <DateTime<FixedOffset> as Into<DateTime<Local>>>::into(date) - Duration::from_secs(offset_in_sec.try_into().unwrap()),
                     _ => panic!("Started has wrong format in file \"{}\"", file_name)
                 } // couldn't find a better way to make it respect local time, sooo yeah
             } else if line.starts_with(&info.array[7].0) {
@@ -1821,10 +1831,12 @@ Grid:
                         cell.is_flagged = (mask & 1) > 0;
                         cell.is_covered = (mask & 2) > 0;
                         cell.is_bomb = (mask & 4) > 0;
-                        cell.abs = cell_values[0].parse::<u8>()
+                        cell.print_zero = (mask & 8) > 0;
+                        cell.abs = cell_values[1].parse::<u8>()
                             .expect(format!("Abs is wrong in cell in file \"{}\"", file_name).as_str());
-                        cell.rel = cell_values[0].parse::<i8>()
+                        cell.rel = cell_values[2].parse::<i8>()
                             .expect(format!("Rel is wrong in cell in file \"{}\"", file_name).as_str());
+                        cell.coord = loc;
                         loc.x += 1;
                     }
                     loc.x = 0;
@@ -1835,6 +1847,13 @@ Grid:
             }
         }
         if loc.w+1 != self.field.dim.w {panic!("Inconsistent w dimension in file \"{}\"", file_name);}
+        self.state = MinesweeperGameState::Running;
+        self.show_info = show_info;
+        self.set_info();
+        self.controls = MinesweeperGame::get_controls();
+        self.settings = self.get_settings();
+        self.field.set_active_cell(true);
+        //eprintln!("{:#?}", self);
         //panic!("uwu");
     }
 }
@@ -1977,7 +1996,7 @@ impl App {
         self.running = true;
         self.capture_mouse = capture_mouse;
         if load_file {
-            self.game.load_file(file_name);
+            self.game.load_file(file_name, show_info);
         } else {
             self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
         }
