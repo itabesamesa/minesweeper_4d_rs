@@ -5,8 +5,9 @@ use std::{
     str,
     time::{Duration, Instant},
     collections::HashMap,
-    fs::File,
+    fs::{File, read_to_string},
     io::Write,
+    path::Path,
 };
 use color_eyre::Result;
 use crossterm::{
@@ -595,7 +596,7 @@ impl MinesweeperCell {
     }
 
     fn as_str(&self) -> String {
-        format!("({} {} {})", ((((if self.is_bomb {1} else {0}) << 1) +
+        format!("({:03} {:03} {:03})", ((((if self.is_bomb {1} else {0}) << 1) +
                 if self.is_covered {1} else {0}) << 1) +
                 if self.is_flagged {1} else {0},
                 self.abs,
@@ -729,6 +730,7 @@ impl MinesweeperField {
         self.state = MinesweeperFieldState::New;
         self.uncovered_cells = 0;
         self.flagged_mines = 0;
+        self.started = Local::now();
         self.duration = Duration::ZERO;
     }
 
@@ -1342,6 +1344,11 @@ impl MinesweeperField {
     }
 
     fn field_str(&self) -> String {
+        let mut w_bar: String = "-".repeat((13*self.dim.x).try_into().unwrap());
+        w_bar.push_str("-+-");
+        w_bar = w_bar.repeat(self.dim.z.try_into().unwrap());
+        w_bar.truncate(w_bar.len()-3);
+        w_bar.push('\n');
         let mut s = String::new();
         for w in 0..self.dim.w {
             for y in 0..self.dim.y {
@@ -1353,9 +1360,12 @@ impl MinesweeperField {
                     }
                     s.push_str(" | ");
                 }
+                s.truncate(s.len()-3);
                 s.push_str("\n");
             }
-            s.push_str("---\n");
+            if w+1 != self.dim.w {
+                s.push_str(&w_bar);
+            }
         }
         s
     }
@@ -1458,18 +1468,7 @@ impl MinesweeperGame {
         self.field.init(dim, mines, delta_mode, sweep_mode);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
-        self.info = KeyValueList::new(false, "Game Info".to_string(), vec![
-            ("Delta mode:".to_string(),      self.field.delta_mode_str()),
-            ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
-            //("Seed:".to_string(),            self.field.seed_str()),
-            ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
-            ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
-            ("Dimensions:".to_string(),      self.field.dim_str()),
-            ("Location:".to_string(),        self.field.loc_str()),
-            ("Started at:".to_string(),      self.field.started_str()),
-            ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
-            ("Game state:".to_string(),      self.field.state_str())
-        ]); // 12 cause it looks good... and plus 2 cause of borders
+        self.info = self.get_info(); // 12 cause it looks good... and plus 2 cause of borders
         self.info_panel_min_width = self.info.constraint_len_key+3+self.info.constraint_len_value;
         self.info_panel_max_width = self.info.constraint_len_key+12+self.info.constraint_len_value;
         self.controls = MinesweeperGame::get_controls();
@@ -1536,6 +1535,21 @@ impl MinesweeperGame {
             ("Flag obvious marked cells:".to_string(),      "alt+x".to_string()),
             ("Mark cell:".to_string(),                      "x".to_string()),
             ("Uncover obvious marked cells:".to_string(),   "X".to_string()),
+        ])
+    }
+
+    fn get_info(&self) -> KeyValueList<String> {
+        KeyValueList::new(false, "Game Info".to_string(), vec![
+            ("Delta mode:".to_string(),      self.field.delta_mode_str()),
+            ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
+            //("Seed:".to_string(),            self.field.seed_str()),
+            ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
+            ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
+            ("Dimensions:".to_string(),      self.field.dim_str()),
+            ("Location:".to_string(),        self.field.loc_str()),
+            ("Started at:".to_string(),      self.field.started_str()),
+            ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
+            ("Game state:".to_string(),      self.field.state_str())
         ])
     }
 
@@ -1638,13 +1652,62 @@ impl MinesweeperGame {
             "Save file for game run on {}\n
 Info:
 {}
-
 Grid:
 {}",
                 self.field.started_str(),
                 self.info.as_str(0),
                 self.field.field_str()).as_bytes()
             );
+    }
+
+    fn load_file(&mut self, file_name: String) {
+        eprintln!("{}", file_name);
+        let path = Path::new(&file_name);
+        if !(path.exists() && path.is_file()) {
+            panic!("Path \"{file_name}\" doesn't exist or isn't a file");
+        } //unwrap already panics, i just don't like the error message, sooo
+        let info = MinesweeperGame::default().get_info();
+        for line in read_to_string(path).unwrap().lines() {
+            eprintln!("{}", line);
+            if line.starts_with(&info.array[0].0) {
+                let (_, mut end) = line.split_at(info.array[0].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[1].0) {
+                let (_, mut end) = line.split_at(info.array[1].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[2].0) {
+                let (_, mut end) = line.split_at(info.array[2].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[3].0) {
+                let (_, mut end) = line.split_at(info.array[3].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[4].0) {
+                let (_, mut end) = line.split_at(info.array[4].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[5].0) {
+                let (_, mut end) = line.split_at(info.array[5].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[6].0) {
+                let (_, mut end) = line.split_at(info.array[6].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[7].0) {
+                let (_, mut end) = line.split_at(info.array[7].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            } else if line.starts_with(&info.array[8].0) {
+                let (_, mut end) = line.split_at(info.array[8].0.len());
+                end = end.trim();
+                eprintln!("{}", end);
+            }
+        }
+        panic!("uwu");
     }
 }
 
@@ -1655,6 +1718,8 @@ fn main() -> color_eyre::Result<()> {
     let mut delta_mode = true;
     let mut sweep_mode = false;
     let mut capture_mouse = false;
+    let mut load_file = false;
+    let mut file_name = String::new();
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
     while let Some(arg) = args.next() {
@@ -1746,6 +1811,11 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
+            "-o" | "--open" => {
+                load_file = true;
+                file_name = args.next()
+                    .expect(format!("You must provide a file path for argument \"{}\"", arg).as_str());
+            },
             &_ => {
                 panic!("Unrecognized option \"{arg}\"");
             }
@@ -1753,7 +1823,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse, load_file, file_name);
     ratatui::restore();
     result
 }
@@ -1775,10 +1845,14 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
-        self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
+        if load_file {
+            self.game.load_file(file_name);
+        } else {
+            self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
+        }
         if capture_mouse {
             execute!(
                 std::io::stdout(),
