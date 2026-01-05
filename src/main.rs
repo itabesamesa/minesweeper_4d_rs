@@ -1528,6 +1528,7 @@ impl MinesweeperGame {
             ("Flag obvious marked cells:".to_string(),      "alt+x".to_string()),
             ("Mark cell:".to_string(),                      "x".to_string()),
             ("Uncover obvious marked cells:".to_string(),   "X".to_string()),
+            ("Save game:".to_string(),                      "ctrl+o".to_string()),
         ])
     }
 
@@ -1537,7 +1538,7 @@ impl MinesweeperGame {
             ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
             //("Seed:".to_string(),            self.field.seed_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
-            ("Mines Flagged:".to_string(),   self.field.mines_flagged_str()),
+            ("Mines flagged:".to_string(),   self.field.mines_flagged_str()),
             ("Dimensions:".to_string(),      self.field.dim_str()),
             ("Location:".to_string(),        self.field.loc_str()),
             ("Started at:".to_string(),      self.field.started_str()),
@@ -1666,10 +1667,18 @@ impl MinesweeperGame {
         ), layout[1])
     }
 
-    fn save_game(&self) {
-        let file_name = self.field.started_str().replace(" ", "_");
-        let mut file = File::create(format!("{}.4dminesweeper", file_name));
-        file.expect("couldn't create file, will fix this later...").write_all(
+    fn save_game(&self, dir: String) {
+        let mut file_name = self.field.started_str().replace(" ", "_");
+        let dir_path = Path::new(&dir);
+        if dir_path.join(&format!("{}.4dminesweeper", file_name)).exists() {
+            let mut i = 1;
+            while dir_path.join(&format!("{}_v{}.4dminesweeper", file_name, i)).exists() {
+                i += 1;
+            }
+            file_name = format!("{}_v{}", file_name, i);
+        }
+        let file = File::create(dir_path.join(format!("{}.4dminesweeper", file_name)));
+        match file.unwrap().write_all(
             format!(
             "Save file for game run on {}\n
 Info:
@@ -1679,11 +1688,13 @@ Grid:
                 self.field.started_str(),
                 self.info.as_str(0),
                 self.field.field_str()).as_bytes()
-            );
+            ) {
+            Err(e) => panic!("{}", e),
+            _ => {},
+        }
     }
 
     fn load_file(&mut self, file_name: String, show_info: bool) {
-        eprintln!("{}", file_name);
         let path = Path::new(&file_name);
         if !(path.exists() && path.is_file()) {
             panic!("Path \"{file_name}\" doesn't exist or isn't a file");
@@ -1692,8 +1703,10 @@ Grid:
         let binding = read_to_string(path).unwrap();
         let mut lines = binding.lines();
         let mut found_grid = false;
+        let mut cells_uncovered = false; // these 3 are necessary
+        let mut mines_flagged = false;   // the reset should be fine
+        let mut dimensions = false;      // fingers crossed...
         while let Some(line) = lines.next() {
-            eprintln!("{}", line);
             if line.starts_with(&info.array[0].0) {
                 let (_, mut end) = line.split_at(info.array[0].0.len());
                 end = end.trim();
@@ -1719,6 +1732,7 @@ Grid:
                 }
                 self.field.uncovered_cells = v[0].parse::<u16>()
                     .expect(format!("Cells uncovered has wrong type in file \"{}\"", file_name).as_str());
+                cells_uncovered = true;
             } else if line.starts_with(&info.array[3].0) {
                 let (_, mut end) = line.split_at(info.array[3].0.len());
                 end = end.trim();
@@ -1730,6 +1744,7 @@ Grid:
                     .expect(format!("Mines flagged has wrong type in file \"{}\"", file_name).as_str());
                 self.field.mines = v[1].parse::<u16>()
                     .expect(format!("Mines flagged has wrong type in file \"{}\"", file_name).as_str());
+                mines_flagged = true;
             } else if line.starts_with(&info.array[4].0) {
                 let (_, mut end) = line.split_at(info.array[4].0.len());
                 end = end.trim();
@@ -1750,6 +1765,7 @@ Grid:
                     .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
                 if self.field.dim.w < 1 {panic!("Dimension values must be greater than 0");}
                 self.field.area = self.field.dim.calc_area();
+                dimensions = true;
             } else if line.starts_with(&info.array[5].0) {
                 let (_, mut end) = line.split_at(info.array[5].0.len());
                 end = end.trim();
@@ -1797,13 +1813,13 @@ Grid:
                 break;
             }
         }
+        if !(cells_uncovered && mines_flagged && dimensions) {panic!("Missing necessary values in info section in file \"{}\"\nNecessary values are: \"Cells uncovered\", \"Mines flagged\", \"Dimensions\"", file_name);}
         if self.field.loc.x < 0 || self.field.loc.x >= self.field.dim.x {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.y < 0 || self.field.loc.x >= self.field.dim.y {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.z < 0 || self.field.loc.x >= self.field.dim.z {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.w < 0 || self.field.loc.x >= self.field.dim.w {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if !found_grid {panic!("No grid in file \"{}\"", file_name)}
         self.field.field = vec![MinesweeperCell::new(); self.field.area];
-        eprintln!("asdsdffafasdsdf");
         let mut loc = Point::new();
         for line in lines {
             if line.starts_with('-') {
@@ -1811,7 +1827,6 @@ Grid:
                 loc.y = 0;
                 loc.w += 1;
             } else {
-                eprintln!("{}", line);
                 let z_split: Vec<_> = line.split(" | ").collect();
                 if z_split.len() != self.field.dim.z.try_into().unwrap() {panic!("Inconsistent z dimension in file \"{}\"", file_name);}
                 for x in z_split {
@@ -1821,11 +1836,10 @@ Grid:
                     cells[0] = &tmp1;
                     let tmp2 = cells[(self.field.dim.x-1) as usize].replace(")", "");
                     cells[(self.field.dim.x-1) as  usize] = &tmp2;
-                    eprintln!("{:#?}", cells);
                     for cell_str in cells {
                         let cell_values: Vec<_> = cell_str.split(" ").collect();
                         if cell_values.len() != 3 {panic!("Cells have wrong number of values in file \"{}\"", file_name)}
-                        let mut cell = self.field.cell_at(loc).unwrap();
+                        let cell = self.field.cell_at(loc).unwrap();
                         let mask = cell_values[0].parse::<u16>()
                             .expect(format!("Mask is wrong in cell in file \"{}\"", file_name).as_str());
                         cell.is_flagged = (mask & 1) > 0;
@@ -1853,7 +1867,6 @@ Grid:
         self.controls = MinesweeperGame::get_controls();
         self.settings = self.get_settings();
         self.field.set_active_cell(true);
-        //eprintln!("{:#?}", self);
         //panic!("uwu");
     }
 }
@@ -1866,6 +1879,7 @@ fn main() -> color_eyre::Result<()> {
     let mut sweep_mode = false;
     let mut capture_mouse = false;
     let mut load_file = false;
+    let mut dir = String::from("./");
     let mut file_name = String::new();
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
@@ -1874,10 +1888,6 @@ fn main() -> color_eyre::Result<()> {
             "-h" | "-?" | "--help" => {
                 let controls = MinesweeperGame::get_controls();
                 println!("{}", controls.title);
-                let width = (controls.constraint_len_key+1) as usize;
-                /*for c in controls.array {
-                    println!("  {}{}", format!("{:width$}", c.0), c.1);
-                }*/
                 print!("{}", controls.as_str(2));
                 println!("Commandline arguments");
                 println!("  -h, -?, --help            Show this menu");
@@ -1887,6 +1897,7 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -o, --dir                 Where to output save files. Default is \"./\"");
                 println!("Default settings as a command");
                 println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
@@ -1958,19 +1969,20 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
-            "-o" | "--open" => {
-                load_file = true;
-                file_name = args.next()
-                    .expect(format!("You must provide a file path for argument \"{}\"", arg).as_str());
+            "-o" | "--dir" => {
+                dir = args.next()
+                    .expect(format!("You must provide a directory for argument \"{}\"", arg).as_str());
+                if !Path::new(&dir).is_dir() {panic!("\"{}\" is not a directory", dir);}
             },
             &_ => {
-                panic!("Unrecognized option \"{arg}\"");
+                load_file = true;
+                file_name = arg;
             }
         }
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse, load_file, file_name);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse, load_file, file_name, dir);
     ratatui::restore();
     result
 }
@@ -1983,6 +1995,7 @@ pub struct App {
     game: MinesweeperGame,
     area: Rect,
     capture_mouse: bool,
+    dir: String,
 }
 
 impl App {
@@ -1992,9 +2005,10 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: String) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
+        self.dir = dir.clone();
         if load_file {
             self.game.load_file(file_name, show_info);
         } else {
@@ -2177,7 +2191,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
@@ -2223,7 +2237,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => {
                                 self.game.field.state = MinesweeperFieldState::Paused;
                                 self.game.state = MinesweeperGameState::Controls;
@@ -2290,7 +2304,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('g'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::RevealField,
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
@@ -2307,7 +2321,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('p'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::Running,
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
