@@ -1679,7 +1679,10 @@ Grid:
             panic!("Path \"{file_name}\" doesn't exist or isn't a file");
         } //unwrap already panics, i just don't like the error message, sooo
         let info = MinesweeperGame::default().get_info();
-        for line in read_to_string(path).unwrap().lines() {
+        let binding = read_to_string(path).unwrap();
+        let mut lines = binding.lines();
+        let mut found_grid = false;
+        while let Some(line) = lines.next() {
             eprintln!("{}", line);
             if line.starts_with(&info.array[0].0) {
                 let (_, mut end) = line.split_at(info.array[0].0.len());
@@ -1736,6 +1739,7 @@ Grid:
                 self.field.dim.w = v[3].parse::<i16>()
                     .expect(format!("Dimension has wrong type in file \"{}\"", file_name).as_str());
                 if self.field.dim.w < 1 {panic!("Dimension values must be greater than 0");}
+                self.field.area = self.field.dim.calc_area();
             } else if line.starts_with(&info.array[5].0) {
                 let (_, mut end) = line.split_at(info.array[5].0.len());
                 end = end.trim();
@@ -1778,13 +1782,60 @@ Grid:
                     Some(state) => self.field.state = state,
                     None => panic!("Invalid game state in file \"{}\"", file_name),
                 }
+            } else if line.starts_with("Grid:") {
+                found_grid = true;
+                break;
             }
         }
         if self.field.loc.x < 0 || self.field.loc.x >= self.field.dim.x {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.y < 0 || self.field.loc.x >= self.field.dim.y {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.z < 0 || self.field.loc.x >= self.field.dim.z {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if self.field.loc.w < 0 || self.field.loc.x >= self.field.dim.w {panic!("Location values must be greater than 0 and smaller than dimensions");}
-        panic!("uwu");
+        if !found_grid {panic!("No grid in file \"{}\"", file_name)}
+        self.field.field = vec![MinesweeperCell::new(); self.field.area];
+        eprintln!("asdsdffafasdsdf");
+        let mut loc = Point::new();
+        for line in lines {
+            if line.starts_with('-') {
+                if loc.y != self.field.dim.y {panic!("Inconsistent y dimension in file \"{}\"", file_name);}
+                loc.y = 0;
+                loc.w += 1;
+            } else {
+                eprintln!("{}", line);
+                let z_split: Vec<_> = line.split(" | ").collect();
+                if z_split.len() != self.field.dim.z.try_into().unwrap() {panic!("Inconsistent z dimension in file \"{}\"", file_name);}
+                for x in z_split {
+                    let mut cells: Vec<_> = x.split(")(").collect();
+                    if cells.len() != self.field.dim.x.try_into().unwrap() {panic!("Inconsistent x dimension in file \"{}\"", file_name);}
+                    let tmp1 = cells[0].replace("(", "");
+                    cells[0] = &tmp1;
+                    let tmp2 = cells[(self.field.dim.x-1) as usize].replace(")", "");
+                    cells[(self.field.dim.x-1) as  usize] = &tmp2;
+                    eprintln!("{:#?}", cells);
+                    for cell_str in cells {
+                        let cell_values: Vec<_> = cell_str.split(" ").collect();
+                        if cell_values.len() != 3 {panic!("Cells have wrong number of values in file \"{}\"", file_name)}
+                        let mut cell = self.field.cell_at(loc).unwrap();
+                        let mask = cell_values[0].parse::<u16>()
+                            .expect(format!("Mask is wrong in cell in file \"{}\"", file_name).as_str());
+                        cell.is_flagged = (mask & 1) > 0;
+                        cell.is_covered = (mask & 2) > 0;
+                        cell.is_bomb = (mask & 4) > 0;
+                        cell.abs = cell_values[0].parse::<u8>()
+                            .expect(format!("Abs is wrong in cell in file \"{}\"", file_name).as_str());
+                        cell.rel = cell_values[0].parse::<i8>()
+                            .expect(format!("Rel is wrong in cell in file \"{}\"", file_name).as_str());
+                        loc.x += 1;
+                    }
+                    loc.x = 0;
+                    loc.z += 1;
+                }
+                loc.z = 0;
+                loc.y += 1;
+            }
+        }
+        if loc.w+1 != self.field.dim.w {panic!("Inconsistent w dimension in file \"{}\"", file_name);}
+        //panic!("uwu");
     }
 }
 
