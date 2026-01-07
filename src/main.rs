@@ -34,6 +34,7 @@ use rand::{
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
+use num::Integer;
 //use rand_chacha::ChaCha20Rng;
 //ChaCha20Rng doesn't implement Default, gonna have to find somthing else
 
@@ -253,9 +254,9 @@ impl<T: Len + std::fmt::Display> KeyValueList<T> {
             scroll_buffer: array.len()/2+1,
             highlight: highlight,
             title: title, // got frustrated... don't question the constraint_len stuff
-            constraint_len_key: array.iter().reduce(|a, b| {if a.0.len() < b.0.len() {b} else {a}}).unwrap().0.len() as u16,
-            constraint_len_value: array.iter().reduce(|a, b| {if a.1.len() < b.1.len() {b} else {a}}).unwrap().1.len() as u16,
-            move_direction: true,
+            constraint_len_key: array.iter().reduce(|a, b| {if a.0.len() < b.0.len() {b} else {a}}).unwrap().0.len() as u16 +1,
+            constraint_len_value: array.iter().reduce(|a, b| {if a.1.len() < b.1.len() {b} else {a}}).unwrap().1.len() as u16 +1,
+            move_direction: true, //+1 cause of borders
             array: array
         }
     }
@@ -292,14 +293,20 @@ impl<T: Len + std::fmt::Display> KeyValueList<T> {
         }
         s
     }
+
+    fn recalc_constraint_len(&mut self) { //+1 cause of borders
+        self.constraint_len_key = self.array.iter().reduce(|a, b| {if a.0.len() < b.0.len() {b} else {a}}).unwrap().0.len() as u16 +1;
+        self.constraint_len_value = self.array.iter().reduce(|a, b| {if a.1.len() < b.1.len() {b} else {a}}).unwrap().1.len() as u16 +1;
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 struct SettingsOption {
     enabled: bool,
     option_type: SettingsOptionTypes,
-    value: u16,
-    gt_zero: bool,
+    value: u64,
+    min: u64,
+    max: u64,
 }
 
 impl fmt::Display for SettingsOption {
@@ -358,7 +365,7 @@ impl SettingsOption {
     fn inc(&mut self) {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
-            SettingsOptionTypes::Int => self.value = self.value.saturating_add(1),
+            SettingsOptionTypes::Int => if self.value < self.max {self.value += 1},
             _ => {},
         }
     }
@@ -367,9 +374,7 @@ impl SettingsOption {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
             SettingsOptionTypes::Int => {
-                if self.gt_zero && self.value == 1 {
-                    return;
-                } else if self.value != 0 {
+                if self.value > self.min {
                     self.value -= 1;
                 }
             },
@@ -377,11 +382,17 @@ impl SettingsOption {
         }
     }
 
-    fn append(&mut self, v: u16) {
+    fn append(&mut self, v: u64) {
         match self.option_type {
             SettingsOptionTypes::Bool => if v != 0 {self.value = 1;} else {self.value = 0;},
-            SettingsOptionTypes::Int => self.value = self.value.saturating_mul(10).saturating_add(v),
-            //could do better, but too lazy
+            SettingsOptionTypes::Int => {
+                let tmp = self.value.saturating_mul(10).saturating_add(v);
+                if tmp > self.max {
+                    self.value = self.max;
+                } else {
+                    self.value = tmp;
+                }
+            },
             _ => {},
         }
     }
@@ -390,9 +401,11 @@ impl SettingsOption {
         match self.option_type {
             SettingsOptionTypes::Bool => self.toggle_bool(),
             SettingsOptionTypes::Int => {
-                self.value = self.value/10;
-                if self.value == 0 && self.gt_zero {
-                    self.value = 1;
+                let tmp = self.value/10;
+                if tmp < self.min {
+                    self.value = self.min;
+                } else {
+                    self.value = tmp;
                 }
             },
             _ => {},
@@ -722,9 +735,9 @@ impl Widget for MinesweeperField {
 }
 
 impl MinesweeperField {
-    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool, sweep_mode: bool) {
+    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool, sweep_mode: bool, seed: u64) {
         self.dim = dim;
-        self.seed = rand::random::<u64>();
+        self.seed = seed;
         self.rng = SeedableRng::seed_from_u64(self.seed);
         self.mines = mines;
         self.delta_mode = delta_mode;
@@ -754,11 +767,11 @@ impl MinesweeperField {
         }
     }
 
-    fn regenerate(&mut self) {
+    fn regenerate(&mut self, regen_seed: bool) {
         self.field.clear();
         self.marks.clear();
         //self.seed = self.rng.next_u64(); // this is a terible idea but :3
-        self.seed = rand::random::<u64>();
+        if regen_seed {self.seed = rand::random::<u64>();}
         self.rng = StdRng::seed_from_u64(self.seed);
         self.fill_field();
         self.set_active_cell(true);
@@ -1375,6 +1388,10 @@ impl MinesweeperField {
         format!("{:.3}", self.duration.as_secs_f32())
     }
 
+    fn seed_str(&self) -> String {
+        format!("{}", self.seed)
+    }
+
     fn state_str(&self) -> String {
         self.state.as_str().to_string()
     }
@@ -1462,14 +1479,14 @@ impl Widget for MinesweeperGame {
             },
             MinesweeperGameState::Controls => {
                 let height = self.controls.array.len()+2;
-                let width = self.controls.constraint_len_key+1+self.controls.constraint_len_value;
+                let width = self.controls.constraint_len_key+2+self.controls.constraint_len_value;
                 self.controls.render(centered_rect(area, width, height.try_into().unwrap()), buf);
             },
             MinesweeperGameState::Settings => {
                 let height = self.settings.0.array.len()+2;
                 let height2 = self.settings.1.array.len()+2;
                 let layout = Layout::horizontal([
-                    Constraint::Length(40),
+                    Constraint::Length(40), //should make them base on KeyValueList, but eh
                     Constraint::Max(50)
                 ].into_iter()).flex(Flex::Center).split(area);
                 self.settings.0.render(center_vertical(layout[0], height.try_into().unwrap()), buf);
@@ -1500,8 +1517,8 @@ impl Widget for MinesweeperGame {
 }
 
 impl MinesweeperGame {
-    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) {
-        self.field.init(dim, mines, delta_mode, sweep_mode);
+    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, seed: u64) {
+        self.field.init(dim, mines, delta_mode, sweep_mode, seed);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
         self.set_info();
@@ -1510,9 +1527,9 @@ impl MinesweeperGame {
     }
 
     fn set_info(&mut self) {
-        self.info = self.get_info(); // 12 cause it looks good... and plus 2 cause of borders
-        self.info_panel_min_width = self.info.constraint_len_key+3+self.info.constraint_len_value;
-        self.info_panel_max_width = self.info.constraint_len_key+12+self.info.constraint_len_value;
+        self.info = self.get_info(); // 10 cause it looks good...
+        self.info_panel_min_width = self.info.constraint_len_key+2+self.info.constraint_len_value;
+        self.info_panel_max_width = self.info.constraint_len_key+10+self.info.constraint_len_value;
     }
 
     fn get_controls() -> KeyValueList<String> {
@@ -1536,6 +1553,7 @@ impl MinesweeperGame {
             ("Move to end in z:".to_string(),               "D, alt+l".to_string()),
             ("Move to top in w:".to_string(),               "W, alt+k".to_string()),
             ("Move to bottom in w:".to_string(),            "S, alt+j".to_string()),
+            ("Retry game:".to_string(),                     "r".to_string()),
             ("New game:".to_string(),                       "n".to_string()),
             ("Find free cell:".to_string(),                 "f".to_string()),
             ("Uncover cell:".to_string(),                   "SPACE".to_string()),
@@ -1558,13 +1576,13 @@ impl MinesweeperGame {
         KeyValueList::new(false, "Game Info".to_string(), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
             ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
-            //("Seed:".to_string(),            self.field.seed_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
             ("Mines flagged:".to_string(),   self.field.mines_flagged_str()),
             ("Dimensions:".to_string(),      self.field.dim_str()),
             ("Location:".to_string(),        self.field.loc_str()),
             ("Started at:".to_string(),      self.field.started_str()),
             ("Time elapsed:".to_string(),    self.field.time_elapsed_str()),
+            ("Seed:".to_string(),            self.field.seed_str()),
             ("Game state:".to_string(),      self.field.state_str())
         ])
     }
@@ -1572,17 +1590,17 @@ impl MinesweeperGame {
     fn get_settings(&self) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
         (
             KeyValueList::new(true, "Game Settings".to_string(), vec![
-                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, gt_zero: false}),
-                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u16, gt_zero: true}),
-                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u16, gt_zero: true}),
-                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u16, gt_zero: true}),
-                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u16, gt_zero: true}),
-                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines, gt_zero: true}), // gt_zero here is cause you can't win with zero mines?!?! que? wtf, idk
-                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}, gt_zero: false}),
-                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}, gt_zero: false}),
-                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}, gt_zero: false}),
-                //("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1}),
-                //("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0}),
+                ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, min: 0, max: 0}),
+                ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u64, min: 1, max: i16::MAX as u64}),
+                ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u64, min: 1, max: i16::MAX as u64}),
+                ("├─ z:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.z as u64, min: 1, max: i16::MAX as u64}),
+                ("└─ w:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.w as u64, min: 1, max: i16::MAX as u64}),
+                ("Mines:".to_string(),           SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.mines as u64, min: 1, max: i16::MAX as u64}),
+                ("Show info:".to_string(),       SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.show_info {1} else {0}, min: 0, max: 1}),
+                ("Delta mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.delta_mode {1} else {0}, min: 0, max: 1}),
+                ("Sweep mode:".to_string(),      SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: if self.field.sweep_mode {1} else {0}, min: 0, max: 1}),
+                ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1, min: 0, max: 1}),
+                ("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0, min: 0, max: u64::MAX}),
             ]),
             KeyValueList::new(false, "Settings Controls".to_string(), vec![
                 ("Exit".to_string(),             "ctrl+C, q, ESC".to_string()),
@@ -1637,7 +1655,7 @@ impl MinesweeperGame {
     }
 
     fn update_info_state(&mut self) {
-        self.info.array[8].1 = self.field.state_str();
+        self.info.array[9].1 = self.field.state_str();
     }
 
     fn move_in_field(&mut self, f: impl Fn(&mut MinesweeperField)) {
@@ -1646,7 +1664,7 @@ impl MinesweeperGame {
     }
 
     fn regenerate_field(&mut self) {
-        self.field.regenerate();
+        self.field.regenerate(self.settings.0.array[8].1.value == 1);
         self.info.array[0].1 = self.field.delta_mode_str();
         self.info.array[1].1 = self.field.sweep_mode_str();
         //self.info.array[1].1 = self.field.seed_str();
@@ -1656,7 +1674,9 @@ impl MinesweeperGame {
         self.info.array[5].1 = self.field.loc_str();
         self.info.array[6].1 = self.field.started_str();
         self.info.array[7].1 = self.field.time_elapsed_str();
-        self.info.array[8].1 = self.field.state_str();
+        self.info.array[8].1 = self.field.seed_str();
+        self.info.array[9].1 = self.field.state_str();
+        self.info.recalc_constraint_len();
     }
 
     fn apply_settings(&mut self) {
@@ -1667,7 +1687,7 @@ impl MinesweeperGame {
             w: self.settings.0.array[4].1.value as i16,
         };
         self.field.area = self.field.dim.calc_area();
-        self.field.mines = self.settings.0.array[5].1.value;
+        self.field.mines = self.settings.0.array[5].1.value as u16;
         self.show_info = if self.settings.0.array[6].1.value == 1 {true} else {false};
         self.field.delta_mode = if self.settings.0.array[7].1.value == 1 {true} else {false};
         /*if self.settings.array[8].1.value == 1 {
@@ -1828,6 +1848,11 @@ Grid:
             } else if line.starts_with(&info.array[8].0) {
                 let (_, mut end) = line.split_at(info.array[8].0.len());
                 end = end.trim();
+                self.field.seed = end.parse::<u64>()
+                    .expect(format!("Seed has wrong type in file \"{}\"", file_name).as_str());
+            } else if line.starts_with(&info.array[9].0) {
+                let (_, mut end) = line.split_at(info.array[9].0.len());
+                end = end.trim();
                 match MinesweeperFieldState::from_str(end) {
                     Some(state) => self.field.state = state,
                     None => panic!("Invalid game state in file \"{}\"", file_name),
@@ -1901,6 +1926,9 @@ fn main() -> color_eyre::Result<()> {
     let mut show_info = true;
     let mut delta_mode = true;
     let mut sweep_mode = false;
+    let mut rand_seed = true;
+    let mut set_seed = false;
+    let mut seed = 0;
     let mut capture_mouse = false;
     let mut load_file = false;
     let mut dir = UserDirs::new().unwrap().download_dir().unwrap().to_path_buf();
@@ -1920,12 +1948,14 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -s, --seed                Set seed. An unsigned integer");
+                println!("  -r, --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -o, --dir                 Where to output save files. Default is \"{}\"", dir.to_str().unwrap());
                 println!("Default settings as a command");
-                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
+                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -r t -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
-                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -c t");
+                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
@@ -1984,6 +2014,22 @@ fn main() -> color_eyre::Result<()> {
                     &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
                 }
             },
+            "-r" | "--random" => {
+                let v = args.next()
+                    .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
+                match v.to_lowercase().as_str() {
+                    "t" | "y" | "true" | "yes" | "on" => rand_seed = true,
+                    "f" | "n" | "false" | "no" | "off" => rand_seed = false,
+                    &_ => panic!("Value \"{v}\" has wrong type for argument \"{arg}\""),
+                }
+            },
+            "-s" | "--seed" => {
+                set_seed = true;
+                let value = args.next()
+                    .expect(format!("You must provide an unsigned integer for argument \"{}\"", arg).as_str());
+                seed = value.parse::<u64>()
+                    .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", value, arg).as_str());
+            },
             "-c" | "--capture_mouse" => {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
@@ -2006,7 +2052,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, capture_mouse, load_file, file_name, dir);
+    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir);
     ratatui::restore();
     result
 }
@@ -2029,15 +2075,16 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, rand_seed: bool, set_seed: bool, seed: u64, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
         self.dir = dir.clone();
         if load_file {
             self.game.load_file(file_name, show_info);
         } else {
-            self.game.init(dim, mines, show_info, delta_mode, sweep_mode);
+            self.game.init(dim, mines, show_info, delta_mode, sweep_mode, if set_seed {seed} else {rand::random::<u64>()});
         }
+        self.game.settings.0.array[8].1.value = if rand_seed {1} else {0};
         if capture_mouse {
             execute!(
                 std::io::stdout(),
@@ -2270,6 +2317,12 @@ impl App {
                                 self.game.field.state = MinesweeperFieldState::Paused;
                                 self.game.state = MinesweeperGameState::Settings;
                             },
+                            (_, KeyCode::Char('r')) => {
+                                let tmp = self.game.settings.0.array[8].1.value;
+                                self.game.settings.0.array[8].1.value = 1;
+                                self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
+                                self.game.settings.0.array[8].1.value = tmp;
+                            },
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
@@ -2331,6 +2384,12 @@ impl App {
                             (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                            (_, KeyCode::Char('r')) => {
+                                let tmp = self.game.settings.0.array[8].1.value;
+                                self.game.settings.0.array[8].1.value = 1;
+                                self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
+                                self.game.settings.0.array[8].1.value = tmp;
+                            },
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
@@ -2377,20 +2436,56 @@ impl App {
                         self.game.regenerate_field();
                         self.game.state = MinesweeperGameState::Running;
                     },
-                    (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => self.game.settings.0.get_tuple().1.dec(),
-                    (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Char('+')) => self.game.settings.0.get_tuple().1.inc(),
+                    (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => {
+                        self.game.settings.0.get_tuple().1.dec();
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Char('+')) => {
+                        self.game.settings.0.get_tuple().1.inc();
+                        self.game.settings.0.recalc_constraint_len();
+                    },
                     (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.settings.0.dec_pos_wrap(),
                     (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.settings.0.inc_pos_wrap(),
-                    (_, KeyCode::Char('0')) => self.game.settings.0.get_tuple().1.append(0),
-                    (_, KeyCode::Char('1')) => self.game.settings.0.get_tuple().1.append(1),
-                    (_, KeyCode::Char('2')) => self.game.settings.0.get_tuple().1.append(2),
-                    (_, KeyCode::Char('3')) => self.game.settings.0.get_tuple().1.append(3),
-                    (_, KeyCode::Char('4')) => self.game.settings.0.get_tuple().1.append(4),
-                    (_, KeyCode::Char('5')) => self.game.settings.0.get_tuple().1.append(5),
-                    (_, KeyCode::Char('6')) => self.game.settings.0.get_tuple().1.append(6),
-                    (_, KeyCode::Char('7')) => self.game.settings.0.get_tuple().1.append(7),
-                    (_, KeyCode::Char('8')) => self.game.settings.0.get_tuple().1.append(8),
-                    (_, KeyCode::Char('9')) => self.game.settings.0.get_tuple().1.append(9),
+                    (_, KeyCode::Char('0')) => {
+                        self.game.settings.0.get_tuple().1.append(0);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('1')) => {
+                        self.game.settings.0.get_tuple().1.append(1);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('2')) => {
+                        self.game.settings.0.get_tuple().1.append(2);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('3')) => {
+                        self.game.settings.0.get_tuple().1.append(3);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('4')) => {
+                        self.game.settings.0.get_tuple().1.append(4);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('5')) => {
+                        self.game.settings.0.get_tuple().1.append(5);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('6')) => {
+                        self.game.settings.0.get_tuple().1.append(6);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('7')) => {
+                        self.game.settings.0.get_tuple().1.append(7);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('8')) => {
+                        self.game.settings.0.get_tuple().1.append(8);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
+                    (_, KeyCode::Char('9')) => {
+                        self.game.settings.0.get_tuple().1.append(9);
+                        self.game.settings.0.recalc_constraint_len();
+                    },
                     //idk if i could've done that better...
                     (_, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('t') | KeyCode::Char('T')) => self.game.settings.0.get_tuple().1.set_bool(true),
                     (_, KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('f') | KeyCode::Char('F')) => self.game.settings.0.get_tuple().1.set_bool(false),
