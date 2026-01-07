@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     fs::{File, read_to_string},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
 };
 use color_eyre::Result;
 use crossterm::{
@@ -33,6 +33,7 @@ use rand::{
 };
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
+use directories::UserDirs;
 //use rand_chacha::ChaCha20Rng;
 //ChaCha20Rng doesn't implement Default, gonna have to find somthing else
 
@@ -1667,17 +1668,19 @@ impl MinesweeperGame {
         ), layout[1])
     }
 
-    fn save_game(&self, dir: String) {
-        let mut file_name = self.field.started_str().replace(" ", "_");
-        let dir_path = Path::new(&dir);
-        if dir_path.join(&format!("{}.4dminesweeper", file_name)).exists() {
+    fn save_game(&self, mut dir: PathBuf) {
+        let file_name = self.field.started_str().replace(" ", "_");
+        dir.push(&format!("{}.4dminesweeper", file_name));
+        if dir.exists() {
+            dir.pop();
             let mut i = 1;
-            while dir_path.join(&format!("{}_v{}.4dminesweeper", file_name, i)).exists() {
+            dir.push(&format!("{}_v{}.4dminesweeper", file_name, i));
+            while dir.exists() {
                 i += 1;
+                dir.pop();
             }
-            file_name = format!("{}_v{}", file_name, i);
         }
-        let file = File::create(dir_path.join(format!("{}.4dminesweeper", file_name)));
+        let file = File::create(dir);
         match file.unwrap().write_all(
             format!(
             "Save file for game run on {}\n
@@ -1879,7 +1882,7 @@ fn main() -> color_eyre::Result<()> {
     let mut sweep_mode = false;
     let mut capture_mouse = false;
     let mut load_file = false;
-    let mut dir = String::from("./");
+    let mut dir = UserDirs::new().unwrap().download_dir().unwrap().to_path_buf();
     let mut file_name = String::new();
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
@@ -1897,7 +1900,7 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -o, --dir                 Where to output save files. Default is \"./\"");
+                println!("  -o, --dir                 Where to output save files. Default is \"{}\"", dir.to_str().unwrap());
                 println!("Default settings as a command");
                 println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
@@ -1970,9 +1973,9 @@ fn main() -> color_eyre::Result<()> {
                 }
             },
             "-o" | "--dir" => {
-                dir = args.next()
-                    .expect(format!("You must provide a directory for argument \"{}\"", arg).as_str());
-                if !Path::new(&dir).is_dir() {panic!("\"{}\" is not a directory", dir);}
+                dir = PathBuf::from(&args.next()
+                    .expect(format!("You must provide a directory for argument \"{}\"", arg).as_str()));
+                if !dir.is_dir() {panic!("\"{}\" is not a directory", dir.to_str().unwrap());}
             },
             &_ => {
                 load_file = true;
@@ -1995,7 +1998,7 @@ pub struct App {
     game: MinesweeperGame,
     area: Rect,
     capture_mouse: bool,
-    dir: String,
+    dir: PathBuf,
 }
 
 impl App {
@@ -2005,7 +2008,7 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: String) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
         self.dir = dir.clone();
