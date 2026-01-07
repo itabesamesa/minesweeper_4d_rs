@@ -28,12 +28,13 @@ use ratatui::{
     prelude::Buffer,
 };
 use rand::{
-    Rng, //SeedableRng,
-    rngs::ThreadRng
+    Rng, SeedableRng, RngCore,
+    rngs::StdRng, rngs::ThreadRng,
 };
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
+use num::Integer;
 //use rand_chacha::ChaCha20Rng;
 //ChaCha20Rng doesn't implement Default, gonna have to find somthing else
 
@@ -104,22 +105,39 @@ enum SettingsOptionTypes {
 }
 
 #[derive(Copy, Clone, Debug, Default)]
-pub struct Point {
-    x: i16,
-    y: i16,
-    z: i16,
-    w: i16
+struct Point<T: Integer> {
+    x: T,
+    y: T,
+    z: T,
+    w: T,
 }
 
-impl PartialEq for Point {
+impl<T: Integer, U: Integer> TryInto<U> for Point<T> {
+    type Error = &'static str;
+
+    fn try_into(self) -> Result<Point<T>, Self::Error> {
+        if self.x.try_into().is_err() || self.y.try_into().is_err() || self.z.try_into().is_err() || self.w.try_into().is_err() {
+            Err("Couldn't try_into")
+        } else {
+            Ok(Point<T> {
+                x: self.x.try_into(),
+                y: self.y.try_into(),
+                z: self.z.try_into(),
+                w: self.w.try_into(),
+            })
+        }
+    }
+}
+
+impl<T: Integer> PartialEq for Point<T> {
     fn eq(&self, other: &Self) -> bool {
         self.x == other.x && self.y == other.y && self.z == other.z && self.w == other.w
     }
 }
 
-impl Eq for Point {}
+impl<T: Integer> Eq for Point<T> {}
 
-impl Ord for Point {
+impl<T: Integer> Ord for Point<T> {
     fn cmp(&self, other: &Self) -> Ordering { //ordering is very iffy cause obviously... best just
                                               //work around and don't touch!
         if self.eq(&other) {
@@ -132,34 +150,38 @@ impl Ord for Point {
     }
 }
 
-impl PartialOrd for Point {
+impl<T: Integer> PartialOrd for Point<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(&other))
     }
 }
 
-impl Point {
-    fn new() -> Point {
-        Point {x: 0, y: 0, z: 0, w: 0}
+impl Point<u32> {
+    fn random_range_u32<T: SeedableRng + RngCore>(rng: &mut T, max: Point<u32>) -> Point<u32> {
+        Point::<u32> {
+            x: (rng.next_u32()%max.x),
+            y: (rng.next_u32()%max.y),
+            z: (rng.next_u32()%max.z),
+            w: (rng.next_u32()%max.w),
+        }
     }
+}
 
-    fn random_range(&mut self, rng: &mut ThreadRng, max: Point) {
-        self.x = rng.random_range(self.x..max.x);
-        self.y = rng.random_range(self.y..max.y);
-        self.z = rng.random_range(self.z..max.z);
-        self.w = rng.random_range(self.w..max.w);
-    }
+impl<T: Integer> Point<T> where usize: From<T> {
+    /*fn new() -> Point<T> {
+        Point {x: Default::default(), y: Default::default(), z: Default::default(), w: Default::default()}
+    }*/
 
-    fn to_1d(self, dim: Point) -> usize {
-        (((self.w * dim.z + self.z) * dim.y + self.y) * dim.x + self.x).try_into().unwrap()
+    fn to_1d(self, dim: Point<T>) -> T {
+        ((self.w * dim.z + self.z) * dim.y + self.y) * dim.x + self.x
         //(((self.x * dim.y + self.y) * dim.z + self.z) * dim.w + self.w).try_into().unwrap()
     }
 
-    fn calc_area(self) -> usize {
-        (self.x*self.y*self.z*self.w).try_into().unwrap()
+    fn calc_area(self) -> T {
+        self.x*self.y*self.z*self.w
     }
 
-    fn offset(self, p: Point) -> Point {
+    fn offset(self, p: Point<T>) -> Point<T> {
         Point {
             x: self.x+p.x,
             y: self.y+p.y,
@@ -170,7 +192,7 @@ impl Point {
 }
 
 #[derive(Clone, Debug, Default)]
-struct KeyValueList<T> {//T must implement to_string() method!
+struct KeyValueList<T: std::fmt::Display> {//T must implement to_string() method!
     pos: usize,
     scroll_buffer: usize,
     highlight: bool,
@@ -406,7 +428,7 @@ struct Mark {
     total: usize,
     amount: usize,
     mines: usize,
-    origin: Point,
+    origin: Point<i16>,
 }
 
 impl Mark {
@@ -416,14 +438,14 @@ impl Mark {
             total: 0,
             amount: 0,
             mines: 0,
-            origin: Point::new(),
+            origin: Point {x: 0, y: 0, z: 0, w: 0},
         }
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 struct MinesweeperCell {
-    coord: Point,
+    coord: Point<i16>,
     is_bomb: bool,
     is_covered: bool,
     is_flagged: bool,
@@ -439,7 +461,7 @@ struct MinesweeperCell {
 impl MinesweeperCell {
     fn new() -> MinesweeperCell {
         MinesweeperCell {
-            coord: Point::new(),
+            coord: Point {x: 0, y: 0, z: 0, w: 0},
             is_bomb: false,
             is_covered: true,
             is_flagged: false,
@@ -496,7 +518,7 @@ impl MinesweeperCell {
         self.is_covered = t;
     }
 
-    fn set_coord(&mut self, p: Point) {
+    fn set_coord(&mut self, p: Point<i16>) {
         self.coord = p;
     }
 
@@ -619,14 +641,14 @@ impl MinesweeperCell {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct MinesweeperField {
     state: MinesweeperFieldState,
-    dim: Point,
-    rng: ThreadRng,
+    dim: Point<i16>,
+    rng: StdRng,
     seed: u64,
     mines: u16,
-    loc: Point,
+    loc: Point<i16>,
     area: usize,
     uncovered_cells: u16,
     flagged_mines: u16,
@@ -637,6 +659,15 @@ struct MinesweeperField {
     //ended: DateTime<Local>,
     field: Vec<MinesweeperCell>,
     marks: HashMap<Color, Mark>,
+}
+
+impl Default for MinesweeperField {
+    fn default() -> MinesweeperField {
+        MinesweeperField {
+            rng: SeedableRng::seed_from_u64(0),
+            ..Default::default()
+        }
+    }
 }
 
 impl Widget for MinesweeperField {
@@ -700,15 +731,11 @@ impl Widget for MinesweeperField {
 }
 
 impl MinesweeperField {
-    fn init(&mut self, dim: Point, mines: u16, delta_mode: bool, sweep_mode: bool) {
-        self.state = MinesweeperFieldState::New;
+    fn init(&mut self, dim: Point<i16>, mines: u16, delta_mode: bool, sweep_mode: bool) {
         self.dim = dim;
         self.seed = 0;
-        self.rng = rand::rng();
+        self.rng = SeedableRng::seed_from_u64(self.seed);
         self.mines = mines;
-        self.loc = Point::new();
-        self.uncovered_cells = 0;
-        self.flagged_mines = 0;
         self.delta_mode = delta_mode;
         self.sweep_mode = sweep_mode;
         self.area = self.dim.calc_area();
@@ -754,21 +781,21 @@ impl MinesweeperField {
         self.do_in_neighbourhood(self.loc, |s, p| s.cell_at(p).unwrap().set_active_neighbourhood(t));
     }
 
-    fn cell_at(&mut self, p: Point) -> Option<&mut MinesweeperCell> {
+    fn cell_at(&mut self, p: Point<i16>) -> Option<&mut MinesweeperCell> {
         if p < self.dim {
             return Some(&mut self.field[p.to_1d(self.dim)]);
         }
         return None;
     }
 
-    fn do_everywhere(&mut self, f: impl Fn(&mut MinesweeperField, Point)) {
+    fn do_everywhere(&mut self, f: impl Fn(&mut MinesweeperField, Point<i16>)) {
         for i in 0..self.area {
             let p = self.field[i].coord;
             f(self, p);
         }
     }
 
-    fn do_in_neighbourhood(&mut self, p: Point, f: impl Fn(&mut MinesweeperField, Point)) {
+    fn do_in_neighbourhood(&mut self, p: Point<i16>, f: impl Fn(&mut MinesweeperField, Point<i16>)) {
         for w in -1..=1 {
             for z in -1..=1 {
                 for y in -1..=1 {
@@ -784,7 +811,7 @@ impl MinesweeperField {
         }
     }
 
-    fn check_in_neighbourhood(&mut self, p: Point, f: impl Fn(&mut MinesweeperField, Point) -> bool) -> bool {
+    fn check_in_neighbourhood(&mut self, p: Point<i16>, f: impl Fn(&mut MinesweeperField, Point<i16>) -> bool) -> bool {
         let mut t: bool = false;
         for w in -1..=1 {
             for z in -1..=1 {
@@ -802,7 +829,7 @@ impl MinesweeperField {
         t
     }
 
-    fn find_in_neighbourhood<T>(&mut self, p: Point, f: impl Fn(&mut MinesweeperField, Point) -> Option<T>) -> Vec<T> {
+    fn find_in_neighbourhood<T>(&mut self, p: Point<i16>, f: impl Fn(&mut MinesweeperField, Point<i16>) -> Option<T>) -> Vec<T> {
         let mut v: Vec<T> = Vec::new();
         for w in -1..=1 {
             for z in -1..=1 {
@@ -837,8 +864,7 @@ impl MinesweeperField {
             if self.mines != (self.area as u16) {
                 for _ in self.mines..(self.area as u16) {
                     loop {
-                        let mut coord = Point::new();
-                        coord.random_range(&mut self.rng, self.dim);
+                        let mut coord = Point::random_range_u32(&mut self.rng, self.dim);
                         let cell = self.cell_at(coord).unwrap();
                         if cell.is_bomb {
                             cell.set_bomb(false);
@@ -851,8 +877,7 @@ impl MinesweeperField {
         } else {
             for _ in 0..self.mines {
                 loop {
-                    let mut coord = Point::new();
-                    coord.random_range(&mut self.rng, self.dim);
+                    let mut coord = Point::random_range_u32(&mut self.rng, self.dim);
                     let cell: &mut MinesweeperCell = self.cell_at(coord).unwrap();
                     if !cell.is_bomb {
                         cell.set_bomb(true);
@@ -976,7 +1001,7 @@ impl MinesweeperField {
         self.set_active_cell(true);
     }
 
-    fn uncover_rel_cell(&mut self, p: Point) {
+    fn uncover_rel_cell(&mut self, p: Point<i16>) {
         self.do_in_neighbourhood(p, |s, p| {
             let cell = s.cell_at(p).unwrap();
             if cell.is_covered || cell.print_zero {
@@ -986,7 +1011,7 @@ impl MinesweeperField {
         });
     }
 
-    fn set_print_zero(&mut self, p: Point) {
+    fn set_print_zero(&mut self, p: Point<i16>) {
         self.do_in_neighbourhood(p, |s, p| {
             if !s.cell_at(p).unwrap().is_covered {
                 let t = s.check_in_neighbourhood(p, |s, p| {
@@ -1003,7 +1028,7 @@ impl MinesweeperField {
         });
     }
 
-    fn uncover_cell(&mut self, p: Point) {
+    fn uncover_cell(&mut self, p: Point<i16>) {
         let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
         if !cell.is_flagged {
             if cell.is_covered {
@@ -1074,7 +1099,7 @@ impl MinesweeperField {
         }
     }
 
-    fn toggle_flagged(&mut self, p: Point) {
+    fn toggle_flagged(&mut self, p: Point<i16>) {
         if self.sweep_mode {
             let cell: &mut MinesweeperCell = self.cell_at(p).unwrap();
             if cell.is_covered {
@@ -1154,7 +1179,7 @@ impl MinesweeperField {
         }
     }
 
-    fn toggle_flagged_chording(&mut self, p: Point) {
+    fn toggle_flagged_chording(&mut self, p: Point<i16>) {
         self.do_in_neighbourhood(p, |s, p| {
             if s.cell_at(p).unwrap().is_covered {
                 s.toggle_flagged(p);
@@ -1163,7 +1188,7 @@ impl MinesweeperField {
     }
 
     fn find_free_cell(&mut self) {
-        let mut p = Point::new();
+        let mut p = Point {x: 0, y: 0, z: 0, w: 0};
         let mut found: bool = false;
         for cell in &self.field {
             if cell.abs == 0 {
@@ -1180,7 +1205,7 @@ impl MinesweeperField {
         }
     }
 
-    fn add_mark(&mut self, p: Point) {
+    fn add_mark(&mut self, p: Point<i16>) {
         let cell = self.cell_at(p).unwrap();
         if !cell.is_covered && cell.rel >= 0 {
             let marked = self.find_in_neighbourhood(p, |s, p| {
@@ -1479,7 +1504,7 @@ impl Widget for MinesweeperGame {
 }
 
 impl MinesweeperGame {
-    fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) {
+    fn init(&mut self, dim: Point<i16>, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool) {
         self.field.init(dim, mines, delta_mode, sweep_mode);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
@@ -1823,7 +1848,7 @@ Grid:
         if self.field.loc.w < 0 || self.field.loc.x >= self.field.dim.w {panic!("Location values must be greater than 0 and smaller than dimensions");}
         if !found_grid {panic!("No grid in file \"{}\"", file_name)}
         self.field.field = vec![MinesweeperCell::new(); self.field.area];
-        let mut loc = Point::new();
+        let mut loc = Point {x: 0, y: 0, z: 0, w: 0};
         for line in lines {
             if line.starts_with('-') {
                 if loc.y != self.field.dim.y {panic!("Inconsistent y dimension in file \"{}\"", file_name);}
@@ -2008,7 +2033,7 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point<i16>, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
         self.dir = dir.clone();
@@ -2162,7 +2187,7 @@ impl App {
                             },
                             _ => {},
                         }
-                    }
+                    } 
                 }
             },
             MinesweeperGameState::Controls => {
