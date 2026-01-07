@@ -29,14 +29,11 @@ use ratatui::{
 };
 use rand::{
     Rng, SeedableRng, RngCore,
-    rngs::StdRng, rngs::ThreadRng,
+    rngs::StdRng,
 };
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
-use num::Integer;
-//use rand_chacha::ChaCha20Rng;
-//ChaCha20Rng doesn't implement Default, gonna have to find somthing else
 
 #[derive(Clone, Debug, Default)]
 enum MinesweeperFieldState {
@@ -1690,12 +1687,6 @@ impl MinesweeperGame {
         self.field.mines = self.settings.0.array[5].1.value as u16;
         self.show_info = if self.settings.0.array[6].1.value == 1 {true} else {false};
         self.field.delta_mode = if self.settings.0.array[7].1.value == 1 {true} else {false};
-        /*if self.settings.array[8].1.value == 1 {
-            //self.field.rng = ;
-            eprintln!("do random seed");
-        } else {
-            eprintln!("no!");
-        }*/
     }
 
     fn game_area(&self, area: Rect) -> (Rect, Rect) {
