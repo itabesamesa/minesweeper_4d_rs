@@ -1661,7 +1661,7 @@ impl MinesweeperGame {
     }
 
     fn regenerate_field(&mut self) {
-        self.field.regenerate(self.settings.0.array[8].1.value == 1);
+        self.field.regenerate(self.settings.0.array[9].1.value == 1);
         self.info.array[0].1 = self.field.delta_mode_str();
         self.info.array[1].1 = self.field.sweep_mode_str();
         //self.info.array[1].1 = self.field.seed_str();
@@ -1687,6 +1687,7 @@ impl MinesweeperGame {
         self.field.mines = self.settings.0.array[5].1.value as u16;
         self.show_info = if self.settings.0.array[6].1.value == 1 {true} else {false};
         self.field.delta_mode = if self.settings.0.array[7].1.value == 1 {true} else {false};
+        self.field.seed = self.settings.0.array[10].1.value;
     }
 
     fn game_area(&self, area: Rect) -> (Rect, Rect) {
@@ -2075,7 +2076,7 @@ impl App {
         } else {
             self.game.init(dim, mines, show_info, delta_mode, sweep_mode, if set_seed {seed} else {rand::random::<u64>()});
         }
-        self.game.settings.0.array[8].1.value = if rand_seed {1} else {0};
+        self.game.settings.0.array[9].1.value = if rand_seed {1} else {0};
         if capture_mouse {
             execute!(
                 std::io::stdout(),
@@ -2309,10 +2310,13 @@ impl App {
                                 self.game.state = MinesweeperGameState::Settings;
                             },
                             (_, KeyCode::Char('r')) => {
-                                let tmp = self.game.settings.0.array[8].1.value;
-                                self.game.settings.0.array[8].1.value = 1;
+                                eprintln!("{:#?}", self.game.settings.0.array[9]);
+                                let tmp = self.game.settings.0.array[9].1.value;
+                                self.game.settings.0.array[9].1.value = 0;
+                                eprintln!("{:#?}", self.game.settings.0.array[9]);
                                 self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
-                                self.game.settings.0.array[8].1.value = tmp;
+                                self.game.settings.0.array[9].1.value = tmp;
+                                eprintln!("{:#?}", self.game.settings.0.array[9]);
                             },
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
@@ -2376,10 +2380,10 @@ impl App {
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('r')) => {
-                                let tmp = self.game.settings.0.array[8].1.value;
-                                self.game.settings.0.array[8].1.value = 1;
+                                let tmp = self.game.settings.0.array[9].1.value;
+                                self.game.settings.0.array[9].1.value = 1;
                                 self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
-                                self.game.settings.0.array[8].1.value = tmp;
+                                self.game.settings.0.array[9].1.value = tmp;
                             },
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
