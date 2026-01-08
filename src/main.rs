@@ -2310,13 +2310,10 @@ impl App {
                                 self.game.state = MinesweeperGameState::Settings;
                             },
                             (_, KeyCode::Char('r')) => {
-                                eprintln!("{:#?}", self.game.settings.0.array[9]);
                                 let tmp = self.game.settings.0.array[9].1.value;
                                 self.game.settings.0.array[9].1.value = 0;
-                                eprintln!("{:#?}", self.game.settings.0.array[9]);
                                 self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
                                 self.game.settings.0.array[9].1.value = tmp;
-                                eprintln!("{:#?}", self.game.settings.0.array[9]);
                             },
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
