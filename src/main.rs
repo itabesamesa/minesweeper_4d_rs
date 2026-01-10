@@ -1676,6 +1676,13 @@ impl MinesweeperGame {
         self.info.recalc_constraint_len();
     }
 
+    fn regenerate_field_same_seed(&mut self) {
+        let tmp = self.settings.0.array[9].1.value;
+        self.settings.0.array[9].1.value = 0;
+        self.regenerate_field(); //fully regenerate_field cause of sweep_mode
+        self.settings.0.array[9].1.value = tmp;
+    }
+
     fn apply_settings(&mut self) {
         self.field.dim = Point {
             x: self.settings.0.array[1].1.value as i16,
@@ -2309,12 +2316,7 @@ impl App {
                                 self.game.field.state = MinesweeperFieldState::Paused;
                                 self.game.state = MinesweeperGameState::Settings;
                             },
-                            (_, KeyCode::Char('r')) => {
-                                let tmp = self.game.settings.0.array[9].1.value;
-                                self.game.settings.0.array[9].1.value = 0;
-                                self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
-                                self.game.settings.0.array[9].1.value = tmp;
-                            },
+                            (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
@@ -2376,12 +2378,7 @@ impl App {
                             (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                            (_, KeyCode::Char('r')) => {
-                                let tmp = self.game.settings.0.array[9].1.value;
-                                self.game.settings.0.array[9].1.value = 1;
-                                self.game.regenerate_field(); //fully regenerate_field cause of sweep_mode
-                                self.game.settings.0.array[9].1.value = tmp;
-                            },
+                            (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
@@ -2399,6 +2396,7 @@ impl App {
                             (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                            (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
                             (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
                             _ => {}

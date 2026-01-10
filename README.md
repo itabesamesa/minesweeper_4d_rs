@@ -128,6 +128,7 @@ minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t
 - [x] Editable settings
 - [x] Make Controls scrollable _custom implementation instead of ratatui Scrollbar_
 - [ ] Make it possible to win when there are 0 mines
+- [ ] Make game state message part of game instead of field
 
 ## License
 
