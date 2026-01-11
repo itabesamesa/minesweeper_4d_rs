@@ -34,6 +34,9 @@ use rand::{
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
+use serde::Deserialize;
+
+use config::Config;
 
 #[derive(Clone, Debug, Default)]
 enum MinesweeperFieldState {
