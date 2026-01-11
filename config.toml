@@ -1,0 +1,111 @@
+[keymap]
+q = "Quit"
+ESC = "Quit"
+Ctrl-c = "Quit all"
+c = "Controls"
+o = "Settings"
+
+[keymap.movement]
+
+[keymap.movement.left]
+Leftarrow = "x"
+h = "x"
+a = "z"
+Ctrl-h = "z"
+
+[keymap.movement.left.start]
+Shift-Leftarrow = "x"
+H = "x"
+A = "z"
+Alt-h = "z"
+
+[keymap.movement.right]
+Rightarrow = "x"
+l = "x"
+d = "z"
+Ctrl-l = "z"
+
+[keymap.movement.right.end]
+Shift-Rightarrow = "x"
+L = "x"
+D = "z"
+Alt-l = "z"
+
+[keymap.movement.up]
+Uparrow = "y"
+k = "y"
+w = "w"
+Ctrl-k = "w"
+
+[keymap.movement.up.top]
+Shift-Uparrow = "y"
+K = "y"
+W = "w"
+Alt-k = "w"
+
+[keymap.movement.down]
+Downarrow = "y"
+j = "y"
+s = "w"
+Ctrl-j = "w"
+
+[keymap.movement.down.bottom]
+Shift-Downarrow = "y"
+J = "y"
+S = "w"
+Alt-j = "w"
+
+[keymap.game]
+r = "Retry"
+n = "New"
+f = "Free"
+SPACE = "Uncover"
+g = "Capitulate"
+m = "Flag"
+e = "Flag"
+M = "Flag chording"
+E = "Flag chording"
+p = "Pause"
+i = "Info"
+u = "Delta"
+U = "Sweep"
+ctrl-o = "Save"
+
+[keymap.game.mark]
+Ctrl-x = "Clear"
+Alt-x = "Flag"
+x = "Set"
+X = "Uncover"
+
+[style]
+
+[style.game]
+
+[style.game.color]
+cursor = "#ff2aff"
+false = "red"
+text = "black"
+
+[style.game.color.light]
+coverd.neighbour = "#807380"
+uncoverd.neighbour = "#b3a1b3"
+coverd.default = "#666666"
+uncoverd.default = "#c6c6c6"
+
+[style.game.color.dark]
+coverd.neighbour = "#595059"
+uncoverd.neighbour = "#a695a6"
+coverd.default = "#3b3b3b"
+uncoverd.default = "#b8b8b8"
+
+[style.info]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.controls]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.settings]
+alignment.key = "Left"
+alignment.value = "Left"
