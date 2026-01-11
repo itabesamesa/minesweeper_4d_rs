@@ -34,7 +34,6 @@ use rand::{
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
-use serde::Deserialize;
 
 use config::Config;
 
@@ -1117,7 +1116,7 @@ impl MinesweeperField {
                     self.uncover_cell(p);
                     self.do_in_neighbourhood(p, |s, p| {
                         let cell = s.cell_at(p).unwrap();
-                        if cell.rel == cell.abs.try_into().unwrap() {
+                        if cell.rel == <u8 as TryInto<i8>>::try_into(cell.abs).unwrap() {
                             cell.dec_all();
                         } else {
                             cell.dec_abs();
@@ -1879,10 +1878,10 @@ Grid:
                 loc.w += 1;
             } else {
                 let z_split: Vec<_> = line.split(" | ").collect();
-                if z_split.len() != self.field.dim.z.try_into().unwrap() {panic!("Inconsistent z dimension in file \"{}\"", file_name);}
+                if z_split.len() != <i16 as TryInto<usize>>::try_into(self.field.dim.z).unwrap() {panic!("Inconsistent z dimension in file \"{}\"", file_name);}
                 for x in z_split {
                     let mut cells: Vec<_> = x.split(")(").collect();
-                    if cells.len() != self.field.dim.x.try_into().unwrap() {panic!("Inconsistent x dimension in file \"{}\"", file_name);}
+                    if cells.len() != <i16 as TryInto<usize>>::try_into(self.field.dim.x).unwrap() {panic!("Inconsistent x dimension in file \"{}\"", file_name);}
                     let tmp1 = cells[0].replace("(", "");
                     cells[0] = &tmp1;
                     let tmp2 = cells[(self.field.dim.x-1) as usize].replace(")", "");

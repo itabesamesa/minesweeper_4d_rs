@@ -679,7 +679,6 @@ dependencies = [
  "len-trait",
  "rand",
  "ratatui",
- "serde",
 ]
 
 [[package]]
