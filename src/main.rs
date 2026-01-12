@@ -8,6 +8,7 @@ use std::{
     fs::{File, read_to_string},
     io::Write,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use color_eyre::Result;
 use crossterm::{
@@ -34,8 +35,7 @@ use rand::{
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
 use directories::UserDirs;
-
-use config::Config;
+use config::{Config, Value, ValueKind, Map};
 
 #[derive(Clone, Debug, Default)]
 enum MinesweeperFieldState {
@@ -101,6 +101,14 @@ enum SettingsOptionTypes {
     #[default] None,
     Bool,
     Int,
+}
+
+#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
+enum Dimension {
+    #[default] X,
+    Y,
+    Z,
+    W,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -178,6 +186,7 @@ struct KeyValueList<T> {//T must implement to_string() method!
     constraint_len_key: u16,
     constraint_len_value: u16,
     move_direction: bool,
+    alignment: (Alignment, Alignment),
     array: Vec<(String, T)>,
 }
 
@@ -223,7 +232,7 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
         block.render(area, buf);
         Paragraph::new(keys)
             .style(Style::new().white())
-            .alignment(Alignment::Left)
+            .alignment(self.alignment.0)
             .wrap(Wrap { trim: true })
             .render(
                 layout[0],
@@ -231,7 +240,7 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
             );
         Paragraph::new(values)
             .style(Style::new().white())
-            .alignment(Alignment::Left)
+            .alignment(self.alignment.1)
             .wrap(Wrap { trim: true })
             .render(
                 layout[1],
@@ -247,7 +256,7 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
 }
 
 impl<T: Len + std::fmt::Display> KeyValueList<T> {
-    fn new(highlight: bool, title: String, array: Vec<(String, T)>) -> KeyValueList<T> {
+    fn new(highlight: bool, title: String, alignment: (Alignment, Alignment), array: Vec<(String, T)>) -> KeyValueList<T> {
         KeyValueList {
             pos: 0,
             scroll_buffer: array.len()/2+1,
@@ -256,6 +265,7 @@ impl<T: Len + std::fmt::Display> KeyValueList<T> {
             constraint_len_key: array.iter().reduce(|a, b| {if a.0.len() < b.0.len() {b} else {a}}).unwrap().0.len() as u16 +1,
             constraint_len_value: array.iter().reduce(|a, b| {if a.1.len() < b.1.len() {b} else {a}}).unwrap().1.len() as u16 +1,
             move_direction: true, //+1 cause of borders
+            alignment: alignment,
             array: array
         }
     }
@@ -1532,7 +1542,7 @@ impl MinesweeperGame {
     }
 
     fn get_controls() -> KeyValueList<String> {
-        KeyValueList::new(true, "Game Controls".to_string(), vec![
+        KeyValueList::new(true, "Game Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
             ("Quit all:".to_string(),                       "ctrl+c".to_string()),
             ("Quit:".to_string(),                           "q, ESC".to_string()),
             ("Controls:".to_string(),                       "c".to_string()),
@@ -1573,7 +1583,7 @@ impl MinesweeperGame {
     }
 
     fn get_info(&self) -> KeyValueList<String> {
-        KeyValueList::new(false, "Game Info".to_string(), vec![
+        KeyValueList::new(false, "Game Info".to_string(), (Alignment::Left, Alignment::Left), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
             ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
@@ -1589,7 +1599,7 @@ impl MinesweeperGame {
 
     fn get_settings(&self) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
         (
-            KeyValueList::new(true, "Game Settings".to_string(), vec![
+            KeyValueList::new(true, "Game Settings".to_string(), (Alignment::Left, Alignment::Left), vec![
                 ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, min: 0, max: 0}),
                 ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u64, min: 1, max: i16::MAX as u64}),
                 ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u64, min: 1, max: i16::MAX as u64}),
@@ -1602,7 +1612,7 @@ impl MinesweeperGame {
                 ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1, min: 0, max: 1}),
                 ("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0, min: 0, max: u64::MAX}),
             ]),
-            KeyValueList::new(false, "Settings Controls".to_string(), vec![
+            KeyValueList::new(false, "Settings Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
                 ("Exit".to_string(),             "q, ESC".to_string()),
                 ("Controls:".to_string(),        "c".to_string()),
                 ("Save and exit".to_string(),    "o".to_string()),
@@ -1922,6 +1932,99 @@ Grid:
     }
 }
 
+fn alignment_from_str(ali: &str) -> Option<Alignment> { //change to result
+    match ali.to_lowercase().as_str() {
+        "left" => Some(Alignment::Left),
+        "right" => Some(Alignment::Right),
+        "center" => Some(Alignment::Center),
+        _ => None,
+    }
+}
+
+fn config_style_alignment(map: HashMap<String, Value>) -> (Alignment, Alignment) {
+    (
+        alignment_from_str(&map.get("key").unwrap().clone().into_string().unwrap()).unwrap(),
+        alignment_from_str(&map.get("value").unwrap().clone().into_string().unwrap()).unwrap()
+    )
+}
+
+fn color_from_str(c: &str) -> Option<Color> { //change to result
+    if c.starts_with("#") {
+        let without_prefix = c.trim_start_matches("#");
+        let rgb = i64::from_str_radix(without_prefix, 16).unwrap();
+        return Some(Color::Rgb(
+                ((rgb >> 16) & 0xff).try_into().unwrap(),
+                ((rgb >> 8) & 0xff).try_into().unwrap(),
+                (rgb & 0xff).try_into().unwrap())
+            );
+    } else {
+        return match Color::from_str(c) { // pls change... this is stupid...
+            Ok(color) => Some(color),
+            Err(_) => None,
+        };
+    }
+}
+
+fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) {
+    let mut press: Vec<_> = s.split("-").collect();
+    eprintln!("{:#?}", press);
+    let key = press.pop().unwrap();
+    (
+        if press.len() == 0 {
+            KeyModifiers::NONE
+        } else {
+            let mut modifiers = KeyModifiers::NONE;
+            for modifier in press {
+                let tmp = if modifier == "ctrl" { String::from("CONTROL") } else { modifier.to_uppercase() };
+                modifiers |= KeyModifiers::from_name(&tmp).unwrap();
+            }
+            modifiers
+        },
+        if key.len() == 1 {
+            KeyCode::Char(key.chars().nth(0).unwrap())
+        } else {
+            match key.to_lowercase().as_str() {
+                "backspace" => KeyCode::Backspace,
+                "enter" => KeyCode::Enter,
+                "left" | "leftarrow" => KeyCode::Left,
+                "right" | "rightarrow" => KeyCode::Right,
+                "up" | "uparrow" => KeyCode::Up,
+                "down" | "downarrow" => KeyCode::Down,
+                "end" => KeyCode::End,
+                "pageup" => KeyCode::PageUp,
+                "pagedown" => KeyCode::PageDown,
+                "tab" => KeyCode::Tab,
+                "backtab" => KeyCode::BackTab,
+                "delete" => KeyCode::Delete,
+                "insert" => KeyCode::Insert,
+                "esc" | "escape" => KeyCode::Esc,
+                _ => panic!("Unrecognized key: {}", key),
+            }
+        }
+    )
+}
+
+fn add_keycode(v: (String, Dimension, String), k: Value, map: &mut HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)>) {
+    match k.kind {
+        ValueKind::String(s) => {map.insert(keycode_from_string(s), v);},
+        ValueKind::Array(a) => {
+            for x in a {
+                add_keycode(v.clone(), x, map);
+            }
+        },
+        _ => panic!("uwu2"),
+    }
+}
+
+fn config_keymap_movement(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)> {
+    let mut map: HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)> = HashMap::new();
+    let Ok(left) = tab.get("left").unwrap().clone().into_table() else { todo!() };
+    add_keycode(("left".to_string(), Dimension::X, "".to_string()), left.get("x").unwrap().clone(), &mut map);
+    let Ok(start) = left.get("start").unwrap().clone().into_table() else { todo!() };
+    add_keycode(("left".to_string(), Dimension::X, "start".to_string()), start.get("x").unwrap().clone(), &mut map);
+    return map;
+}
+
 fn main() -> color_eyre::Result<()> {
     let settings = Config::builder()
         // Add in `./Settings.toml`
@@ -1940,6 +2043,15 @@ fn main() -> color_eyre::Result<()> {
             .unwrap()
     );*/
     println!("database: {:#?}", settings.get_table("keymap.movement").unwrap());
+    println!("database: {:#?}", settings.get_table("style").unwrap());
+    println!("{:#?}", config_style_alignment(settings.get_table("style.info.alignment").unwrap()));
+    println!("{:#?}", config_style_alignment(settings.get_table("style.controls.alignment").unwrap()));
+    println!("{:#?}", config_style_alignment(settings.get_table("style.settings.settings.alignment").unwrap()));
+    println!("{:#?}", config_style_alignment(settings.get_table("style.settings.controls.alignment").unwrap()));
+    println!("{:#?}", color_from_str(&settings.get_string("style.game.color.cursor").unwrap()));
+    println!("{:#?}", color_from_str(&settings.get_string("style.game.color.false").unwrap()));
+    println!("database: {:#?}", settings.get_table("keymap.movement.left").unwrap());
+    println!("{:#?}", config_keymap_movement(settings.get_table("keymap.movement").unwrap()));
     panic!("uwu");
     let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
     let mut mines: u16 = 20;

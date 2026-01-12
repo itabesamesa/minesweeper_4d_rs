@@ -1,81 +1,64 @@
 [keymap]
-q = "Quit"
-ESC = "Quit"
-Ctrl-c = "Quit all"
-c = "Controls"
-o = "Settings"
+quit = ["q", "ESC"]
+quit_all = "crtl+c"
+controls = "c"
+settings = "o"
 
 [keymap.movement]
 
 [keymap.movement.left]
-Leftarrow = "x"
-h = "x"
-a = "z"
-Ctrl-h = "z"
+x = ["leftarrow", "h"]
+z = ["a", "ctrl-h"]
 
 [keymap.movement.left.start]
-Shift-Leftarrow = "x"
-H = "x"
-A = "z"
-Alt-h = "z"
+x = ["shift-leftarrow", "H"]
+z = ["A", "H"]
 
 [keymap.movement.right]
-Rightarrow = "x"
-l = "x"
-d = "z"
-Ctrl-l = "z"
+x = ["rightarrow", "l"]
+z = ["d", "ctrl-d"]
 
 [keymap.movement.right.end]
-Shift-Rightarrow = "x"
-L = "x"
-D = "z"
-Alt-l = "z"
+x = ["shift-rightarrow", "L"]
+z = ["D", "alt-d"]
 
 [keymap.movement.up]
-Uparrow = "y"
-k = "y"
-w = "w"
-Ctrl-k = "w"
+y = ["uparrow", "k"]
+w = ["w", "ctrl-k"]
 
 [keymap.movement.up.top]
-Shift-Uparrow = "y"
-K = "y"
-W = "w"
-Alt-k = "w"
+y = ["shift-uparrow", "K"]
+w = ["W", "alt-k"]
 
 [keymap.movement.down]
-Downarrow = "y"
-j = "y"
-s = "w"
-Ctrl-j = "w"
+y = ["downarrow", "j"]
+w = ["s", "ctrl-j"]
 
 [keymap.movement.down.bottom]
-Shift-Downarrow = "y"
-J = "y"
-S = "w"
-Alt-j = "w"
+y = ["shift-downarrow", "J"]
+w = ["S", "alt-j"]
 
 [keymap.game]
-r = "Retry"
-n = "New"
-f = "Free"
-SPACE = "Uncover"
-g = "Capitulate"
-m = "Flag"
-e = "Flag"
-M = "Flag chording"
-E = "Flag chording"
-p = "Pause"
-i = "Info"
-u = "Delta"
-U = "Sweep"
-ctrl-o = "Save"
+retry = "r"
+new = "n"
+free = "f"
+uncover = " "
+capitulate = "g"
+flag = ["m", "e"]
+flag_chording = ["M", "E"]
+pause = "p"
+save = "crtl-o"
+
+[keymap.game.toggle]
+info = "i"
+delta = "u"
+sweep = "U"
 
 [keymap.game.mark]
-Ctrl-x = "Clear"
-Alt-x = "Flag"
-x = "Set"
-X = "Uncover"
+clear = "ctrl-x"
+flag = "alt-x"
+set = "x"
+uncover = "X"
 
 [style]
 
@@ -106,6 +89,10 @@ alignment.value = "Left"
 alignment.key = "Left"
 alignment.value = "Left"
 
-[style.settings]
+[style.settings.settings]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.settings.controls]
 alignment.key = "Left"
 alignment.value = "Left"
