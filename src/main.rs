@@ -111,6 +111,21 @@ enum Dimension {
     W,
 }
 
+#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
+enum Movement {
+    #[default] Left,
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
+enum MinMax {
+    #[default] None,
+    Min,
+    Max,
+}
+
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Point {
     x: i16,
@@ -1928,7 +1943,6 @@ Grid:
         self.controls = MinesweeperGame::get_controls();
         self.settings = self.get_settings();
         self.field.set_active_cell(true);
-        //panic!("uwu");
     }
 }
 
@@ -1965,9 +1979,8 @@ fn color_from_str(c: &str) -> Option<Color> { //change to result
     }
 }
 
-fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) {
+fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) { //change to result
     let mut press: Vec<_> = s.split("-").collect();
-    eprintln!("{:#?}", press);
     let key = press.pop().unwrap();
     (
         if press.len() == 0 {
@@ -1975,8 +1988,14 @@ fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) {
         } else {
             let mut modifiers = KeyModifiers::NONE;
             for modifier in press {
-                let tmp = if modifier == "ctrl" { String::from("CONTROL") } else { modifier.to_uppercase() };
-                modifiers |= KeyModifiers::from_name(&tmp).unwrap();
+                let mut tmp = modifier.to_uppercase();
+                if tmp == "CTRL" {
+                    tmp = String::from("CONTROL");
+                }
+                match KeyModifiers::from_name(&tmp) {
+                    Some(m) => modifiers |= m,
+                    None => panic!("Unrecognized modifier: {}", modifier),
+                }
             }
             modifiers
         },
@@ -2004,7 +2023,7 @@ fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) {
     )
 }
 
-fn add_keycode(v: (String, Dimension, String), k: Value, map: &mut HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)>) {
+fn add_keycode(v: (Movement, Dimension, MinMax), k: Value, map: &mut HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>) {
     match k.kind {
         ValueKind::String(s) => {map.insert(keycode_from_string(s), v);},
         ValueKind::Array(a) => {
@@ -2012,18 +2031,56 @@ fn add_keycode(v: (String, Dimension, String), k: Value, map: &mut HashMap<(KeyM
                 add_keycode(v.clone(), x, map);
             }
         },
-        _ => panic!("uwu2"),
+        _ => panic!("Wrong type: {}", k.kind),
     }
 }
 
-fn config_keymap_movement(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)> {
-    let mut map: HashMap<(KeyModifiers, KeyCode), (String, Dimension, String)> = HashMap::new();
-    let Ok(left) = tab.get("left").unwrap().clone().into_table() else { todo!() };
-    add_keycode(("left".to_string(), Dimension::X, "".to_string()), left.get("x").unwrap().clone(), &mut map);
-    let Ok(start) = left.get("start").unwrap().clone().into_table() else { todo!() };
-    add_keycode(("left".to_string(), Dimension::X, "start".to_string()), start.get("x").unwrap().clone(), &mut map);
+fn config_keymap_movement(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)> {
+    let mut map: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)> = HashMap::new();
+    tab.get("left").unwrap().clone().into_table().and_then(|left| {
+        add_keycode((Movement::Left, Dimension::X, MinMax::None), left.get("x").unwrap().clone(), &mut map);
+        add_keycode((Movement::Left, Dimension::Z, MinMax::None), left.get("z").unwrap().clone(), &mut map);
+        left.get("start").unwrap().clone().into_table().and_then(|start| {
+            add_keycode((Movement::Left, Dimension::X, MinMax::Min), start.get("x").unwrap().clone(), &mut map);
+            add_keycode((Movement::Left, Dimension::Z, MinMax::Min), start.get("z").unwrap().clone(), &mut map);
+            Ok(0)
+        }).unwrap();
+        Ok(0)
+    }).unwrap();
+    tab.get("right").unwrap().clone().into_table().and_then(|right| {
+        add_keycode((Movement::Right, Dimension::X, MinMax::None), right.get("x").unwrap().clone(), &mut map);
+        add_keycode((Movement::Right, Dimension::Z, MinMax::None), right.get("z").unwrap().clone(), &mut map);
+        right.get("end").unwrap().clone().into_table().and_then(|end| {
+            add_keycode((Movement::Right, Dimension::X, MinMax::Max), end.get("x").unwrap().clone(), &mut map);
+            add_keycode((Movement::Right, Dimension::Z, MinMax::Max), end.get("z").unwrap().clone(), &mut map);
+            Ok(0)
+        }).unwrap();
+        Ok(0)
+    }).unwrap();
+    tab.get("up").unwrap().clone().into_table().and_then(|left| {
+        add_keycode((Movement::Up, Dimension::Y, MinMax::None), left.get("y").unwrap().clone(), &mut map);
+        add_keycode((Movement::Up, Dimension::W, MinMax::None), left.get("w").unwrap().clone(), &mut map);
+        left.get("top").unwrap().clone().into_table().and_then(|start| {
+            add_keycode((Movement::Up, Dimension::Y, MinMax::Min), start.get("y").unwrap().clone(), &mut map);
+            add_keycode((Movement::Up, Dimension::W, MinMax::Min), start.get("w").unwrap().clone(), &mut map);
+            Ok(0)
+        }).unwrap();
+        Ok(0)
+    }).unwrap();
+    tab.get("down").unwrap().clone().into_table().and_then(|right| {
+        add_keycode((Movement::Down, Dimension::Y, MinMax::None), right.get("y").unwrap().clone(), &mut map);
+        add_keycode((Movement::Down, Dimension::W, MinMax::None), right.get("w").unwrap().clone(), &mut map);
+        right.get("bottom").unwrap().clone().into_table().and_then(|end| {
+            add_keycode((Movement::Down, Dimension::Y, MinMax::Max), end.get("y").unwrap().clone(), &mut map);
+            add_keycode((Movement::Down, Dimension::W, MinMax::Max), end.get("w").unwrap().clone(), &mut map);
+            Ok(0)
+        }).unwrap();
+        Ok(0)
+    }).unwrap();
     return map;
 }
+
+//fn config_keymap_game()
 
 fn main() -> color_eyre::Result<()> {
     let settings = Config::builder()
@@ -2052,7 +2109,7 @@ fn main() -> color_eyre::Result<()> {
     println!("{:#?}", color_from_str(&settings.get_string("style.game.color.false").unwrap()));
     println!("database: {:#?}", settings.get_table("keymap.movement.left").unwrap());
     println!("{:#?}", config_keymap_movement(settings.get_table("keymap.movement").unwrap()));
-    panic!("uwu");
+    //panic!("uwu");
     let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
     let mut mines: u16 = 20;
     let mut show_info = true;
@@ -2184,7 +2241,7 @@ fn main() -> color_eyre::Result<()> {
     }
     color_eyre::install()?;
     let terminal = ratatui::init();
-    let result = App::new().run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir);
+    let result = App::new(config_keymap_movement(settings.get_table("keymap.movement").unwrap())).run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir);
     ratatui::restore();
     result
 }
@@ -2198,12 +2255,15 @@ pub struct App {
     area: Rect,
     capture_mouse: bool,
     dir: PathBuf,
+    movement: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>,
 }
 
 impl App {
     /// Construct a new instance of [`App`].
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(movement: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>) -> Self {
+        let mut app = Self::default();
+        app.movement = movement;
+        app
     }
 
     /// Run the application's main loop.
