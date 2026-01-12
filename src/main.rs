@@ -119,13 +119,6 @@ enum Movement {
     Down,
 }
 
-#[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-enum MinMax {
-    #[default] None,
-    Min,
-    Max,
-}
-
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Point {
     x: i16,
@@ -2023,7 +2016,7 @@ fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) { //change to resul
     )
 }
 
-fn add_keycode(v: (Movement, Dimension, MinMax), k: Value, map: &mut HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>) {
+fn add_keycode(v: (Movement, Dimension, bool), k: Value, map: &mut HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>) {
     match k.kind {
         ValueKind::String(s) => {map.insert(keycode_from_string(s), v);},
         ValueKind::Array(a) => {
@@ -2035,44 +2028,44 @@ fn add_keycode(v: (Movement, Dimension, MinMax), k: Value, map: &mut HashMap<(Ke
     }
 }
 
-fn config_keymap_movement(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)> {
-    let mut map: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)> = HashMap::new();
+fn config_keymap_movement(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)> {
+    let mut map: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)> = HashMap::new();
     tab.get("left").unwrap().clone().into_table().and_then(|left| {
-        add_keycode((Movement::Left, Dimension::X, MinMax::None), left.get("x").unwrap().clone(), &mut map);
-        add_keycode((Movement::Left, Dimension::Z, MinMax::None), left.get("z").unwrap().clone(), &mut map);
+        add_keycode((Movement::Left, Dimension::X, false), left.get("x").unwrap().clone(), &mut map);
+        add_keycode((Movement::Left, Dimension::Z, false), left.get("z").unwrap().clone(), &mut map);
         left.get("start").unwrap().clone().into_table().and_then(|start| {
-            add_keycode((Movement::Left, Dimension::X, MinMax::Min), start.get("x").unwrap().clone(), &mut map);
-            add_keycode((Movement::Left, Dimension::Z, MinMax::Min), start.get("z").unwrap().clone(), &mut map);
+            add_keycode((Movement::Left, Dimension::X, true), start.get("x").unwrap().clone(), &mut map);
+            add_keycode((Movement::Left, Dimension::Z, true), start.get("z").unwrap().clone(), &mut map);
             Ok(0)
         }).unwrap();
         Ok(0)
     }).unwrap();
     tab.get("right").unwrap().clone().into_table().and_then(|right| {
-        add_keycode((Movement::Right, Dimension::X, MinMax::None), right.get("x").unwrap().clone(), &mut map);
-        add_keycode((Movement::Right, Dimension::Z, MinMax::None), right.get("z").unwrap().clone(), &mut map);
+        add_keycode((Movement::Right, Dimension::X, false), right.get("x").unwrap().clone(), &mut map);
+        add_keycode((Movement::Right, Dimension::Z, false), right.get("z").unwrap().clone(), &mut map);
         right.get("end").unwrap().clone().into_table().and_then(|end| {
-            add_keycode((Movement::Right, Dimension::X, MinMax::Max), end.get("x").unwrap().clone(), &mut map);
-            add_keycode((Movement::Right, Dimension::Z, MinMax::Max), end.get("z").unwrap().clone(), &mut map);
+            add_keycode((Movement::Right, Dimension::X, true), end.get("x").unwrap().clone(), &mut map);
+            add_keycode((Movement::Right, Dimension::Z, true), end.get("z").unwrap().clone(), &mut map);
             Ok(0)
         }).unwrap();
         Ok(0)
     }).unwrap();
     tab.get("up").unwrap().clone().into_table().and_then(|left| {
-        add_keycode((Movement::Up, Dimension::Y, MinMax::None), left.get("y").unwrap().clone(), &mut map);
-        add_keycode((Movement::Up, Dimension::W, MinMax::None), left.get("w").unwrap().clone(), &mut map);
+        add_keycode((Movement::Up, Dimension::Y, false), left.get("y").unwrap().clone(), &mut map);
+        add_keycode((Movement::Up, Dimension::W, false), left.get("w").unwrap().clone(), &mut map);
         left.get("top").unwrap().clone().into_table().and_then(|start| {
-            add_keycode((Movement::Up, Dimension::Y, MinMax::Min), start.get("y").unwrap().clone(), &mut map);
-            add_keycode((Movement::Up, Dimension::W, MinMax::Min), start.get("w").unwrap().clone(), &mut map);
+            add_keycode((Movement::Up, Dimension::Y, true), start.get("y").unwrap().clone(), &mut map);
+            add_keycode((Movement::Up, Dimension::W, true), start.get("w").unwrap().clone(), &mut map);
             Ok(0)
         }).unwrap();
         Ok(0)
     }).unwrap();
     tab.get("down").unwrap().clone().into_table().and_then(|right| {
-        add_keycode((Movement::Down, Dimension::Y, MinMax::None), right.get("y").unwrap().clone(), &mut map);
-        add_keycode((Movement::Down, Dimension::W, MinMax::None), right.get("w").unwrap().clone(), &mut map);
+        add_keycode((Movement::Down, Dimension::Y, false), right.get("y").unwrap().clone(), &mut map);
+        add_keycode((Movement::Down, Dimension::W, false), right.get("w").unwrap().clone(), &mut map);
         right.get("bottom").unwrap().clone().into_table().and_then(|end| {
-            add_keycode((Movement::Down, Dimension::Y, MinMax::Max), end.get("y").unwrap().clone(), &mut map);
-            add_keycode((Movement::Down, Dimension::W, MinMax::Max), end.get("w").unwrap().clone(), &mut map);
+            add_keycode((Movement::Down, Dimension::Y, true), end.get("y").unwrap().clone(), &mut map);
+            add_keycode((Movement::Down, Dimension::W, true), end.get("w").unwrap().clone(), &mut map);
             Ok(0)
         }).unwrap();
         Ok(0)
@@ -2255,14 +2248,14 @@ pub struct App {
     area: Rect,
     capture_mouse: bool,
     dir: PathBuf,
-    movement: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>,
+    movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>,
 }
 
 impl App {
     /// Construct a new instance of [`App`].
-    pub fn new(movement: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, MinMax)>) -> Self {
+    pub fn new(movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>) -> Self {
         let mut app = Self::default();
-        app.movement = movement;
+        app.movement_keymap = movement_keymap;
         app
     }
 
@@ -2454,115 +2447,127 @@ impl App {
                 MinesweeperGameState::Running => {
                     match self.game.field.state {
                         MinesweeperFieldState::New => {
-                            match (key.modifiers, key.code) {
-                                (_, KeyCode::Esc | KeyCode::Char('q')) => self.quit(),
-                                (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
-                                (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
-                                (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                                (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
-                                (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
-                                (_, KeyCode::Char('U')) => {
-                                    self.game.toggle_sweep_mode();
-                                    if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
-                                },
-                                (_, KeyCode::Char('A')) | (KeyModifiers::ALT, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_end_z()),
-                                (_, KeyCode::Char('D')) | (KeyModifiers::ALT, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_end_z()),
-                                (_, KeyCode::Char('W')) | (KeyModifiers::ALT, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_end_w()),
-                                (_, KeyCode::Char('S')) | (KeyModifiers::ALT, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_end_w()),
-                                (KeyModifiers::SHIFT, KeyCode::Left  | KeyCode::Char('H')) => self.game.move_in_field(|f| f.move_left_end_x()),
-                                (KeyModifiers::SHIFT, KeyCode::Right | KeyCode::Char('L')) => self.game.move_in_field(|f| f.move_right_end_x()),
-                                (KeyModifiers::SHIFT, KeyCode::Up    | KeyCode::Char('K')) => self.game.move_in_field(|f| f.move_up_end_y()),
-                                (KeyModifiers::SHIFT, KeyCode::Down  | KeyCode::Char('J')) => self.game.move_in_field(|f| f.move_down_end_y()),
-                                (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
-                                (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
-                                (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
-                                (_, KeyCode::Char('s')) | (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_w()),
-                                (_, KeyCode::Left  | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
-                                (_, KeyCode::Right | KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_x()),
-                                (_, KeyCode::Up    | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
-                                (_, KeyCode::Down  | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
-                                (_, KeyCode::Char('f')) => {
-                                    self.game.field.state = MinesweeperFieldState::Running;
-                                    self.game.field.find_free_cell();
-                                    self.game.field.started = Local::now();
-                                    self.game.update_info_cells_uncovered();
-                                    self.game.update_info_started();
-                                },
-                                (_, KeyCode::Char(' ')) => {
-                                    self.game.field.state = MinesweeperFieldState::Running;
-                                    self.game.field.uncover_cell(self.game.field.loc);
-                                    self.game.field.started = Local::now();
-                                    self.game.update_info_cells_uncovered();
-                                    self.game.update_info_started();
-                                },
-                                _ => {}
+                            if let Some(movement) = self.movement.get(&(key.modifiers, key.code)) {
+                                match movement {
+                                    &(Movement::Left,   Dimension::X, false)    => self.game.move_in_field(|f| f.move_left_x()),
+                                    &(Movement::Left,   Dimension::X, true)     => self.game.move_in_field(|f| f.move_left_end_x()),
+                                    &(Movement::Right,  Dimension::X, false)    => self.game.move_in_field(|f| f.move_right_x()),
+                                    &(Movement::Right,  Dimension::X, true)     => self.game.move_in_field(|f| f.move_right_end_x()),
+                                    &(Movement::Up,     Dimension::Y, false)    => self.game.move_in_field(|f| f.move_up_y()),
+                                    &(Movement::Up,     Dimension::Y, true)     => self.game.move_in_field(|f| f.move_up_end_y()),
+                                    &(Movement::Down,   Dimension::Y, false)    => self.game.move_in_field(|f| f.move_down_y()),
+                                    &(Movement::Down,   Dimension::Y, true)     => self.game.move_in_field(|f| f.move_down_end_y()),
+                                    &(Movement::Left,   Dimension::Z, false)    => self.game.move_in_field(|f| f.move_left_z()),
+                                    &(Movement::Left,   Dimension::Z, true)     => self.game.move_in_field(|f| f.move_left_end_z()),
+                                    &(Movement::Right,  Dimension::Z, false)    => self.game.move_in_field(|f| f.move_right_z()),
+                                    &(Movement::Right,  Dimension::Z, true)     => self.game.move_in_field(|f| f.move_right_end_z()),
+                                    &(Movement::Up,     Dimension::W, false)    => self.game.move_in_field(|f| f.move_up_w()),
+                                    &(Movement::Up,     Dimension::W, true)     => self.game.move_in_field(|f| f.move_up_end_w()),
+                                    &(Movement::Down,   Dimension::W, false)    => self.game.move_in_field(|f| f.move_down_w()),
+                                    &(Movement::Down,   Dimension::W, true)     => self.game.move_in_field(|f| f.move_down_end_w()),
+                                    _ => {},
+                                }
+                            } else {
+                                match (key.modifiers, key.code) {
+                                    (_, KeyCode::Esc | KeyCode::Char('q')) => self.quit(),
+                                    (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
+                                    (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
+                                    (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                                    (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                                    (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
+                                    (_, KeyCode::Char('U')) => {
+                                        self.game.toggle_sweep_mode();
+                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                    },
+                                    (_, KeyCode::Char('f')) => {
+                                        self.game.field.state = MinesweeperFieldState::Running;
+                                        self.game.field.find_free_cell();
+                                        self.game.field.started = Local::now();
+                                        self.game.update_info_cells_uncovered();
+                                        self.game.update_info_started();
+                                    },
+                                    (_, KeyCode::Char(' ')) => {
+                                        self.game.field.state = MinesweeperFieldState::Running;
+                                        self.game.field.uncover_cell(self.game.field.loc);
+                                        self.game.field.started = Local::now();
+                                        self.game.update_info_cells_uncovered();
+                                        self.game.update_info_started();
+                                    },
+                                    _ => {}
+                                }
                             }
                         },
                         MinesweeperFieldState::Running | MinesweeperFieldState::RevealField => {
-                            match (key.modifiers, key.code) {
-                                (_, KeyCode::Esc | KeyCode::Char('q')) => self.quit(),
-                                (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
-                                (_, KeyCode::Char('c')) => {
-                                    self.game.field.state = MinesweeperFieldState::Paused;
-                                    self.game.state = MinesweeperGameState::Controls;
-                                },
-                                (_, KeyCode::Char('o')) => {
-                                    self.game.field.state = MinesweeperFieldState::Paused;
-                                    self.game.state = MinesweeperGameState::Settings;
-                                },
-                                (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
-                                (_, KeyCode::Char('n')) => self.game.regenerate_field(),
-                                (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
-                                (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
-                                (_, KeyCode::Char('U')) => {
-                                    self.game.toggle_sweep_mode();
-                                    if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
-                                },
-                                (_, KeyCode::Char('A')) | (KeyModifiers::ALT, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_end_z()),
-                                (_, KeyCode::Char('D')) | (KeyModifiers::ALT, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_end_z()),
-                                (_, KeyCode::Char('W')) | (KeyModifiers::ALT, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_end_w()),
-                                (_, KeyCode::Char('S')) | (KeyModifiers::ALT, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_end_w()),
-                                (KeyModifiers::SHIFT, KeyCode::Left  | KeyCode::Char('H')) => self.game.move_in_field(|f| f.move_left_end_x()),
-                                (KeyModifiers::SHIFT, KeyCode::Right | KeyCode::Char('L')) => self.game.move_in_field(|f| f.move_right_end_x()),
-                                (KeyModifiers::SHIFT, KeyCode::Up    | KeyCode::Char('K')) => self.game.move_in_field(|f| f.move_up_end_y()),
-                                (KeyModifiers::SHIFT, KeyCode::Down  | KeyCode::Char('J')) => self.game.move_in_field(|f| f.move_down_end_y()),
-                                (_, KeyCode::Char('a')) | (KeyModifiers::CONTROL, KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_z()),
-                                (_, KeyCode::Char('d')) | (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_z()),
-                                (_, KeyCode::Char('w')) | (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_w()),
-                                (_, KeyCode::Char('s')) | (KeyModifiers::CONTROL, KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_w()),
-                                (_, KeyCode::Left  | KeyCode::Char('h')) => self.game.move_in_field(|f| f.move_left_x()),
-                                (_, KeyCode::Right | KeyCode::Char('l')) => self.game.move_in_field(|f| f.move_right_x()),
-                                (_, KeyCode::Up    | KeyCode::Char('k')) => self.game.move_in_field(|f| f.move_up_y()),
-                                (_, KeyCode::Down  | KeyCode::Char('j')) => self.game.move_in_field(|f| f.move_down_y()),
-                                (_, KeyCode::Char('p')) => self.game.field.state = MinesweeperFieldState::Paused,
-                                (_, KeyCode::Char(' ')) => {
-                                    self.game.field.uncover_cell(self.game.field.loc);
-                                    self.game.update_info_cells_uncovered();
-                                },
-                                (_, KeyCode::Char('m') | KeyCode::Char('e')) => {
-                                    self.game.field.toggle_flagged(self.game.field.loc);
-                                    self.game.update_info_mines_flagged();
-                                    if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
-                                },
-                                (_, KeyCode::Char('M') | KeyCode::Char('E')) => {
-                                    self.game.field.toggle_flagged_chording(self.game.field.loc);
-                                    self.game.update_info_mines_flagged();
-                                    if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
-                                },
-                                (_, KeyCode::Char('g')) => {
-                                    if !matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
-                                        self.game.field.state = MinesweeperFieldState::GaveUp;
-                                    } else {
-                                        self.game.field.do_everywhere(|f, p| f.cell_at(p).unwrap().set_covered(false));
-                                        self.game.field.uncovered_cells = self.game.field.area as u16;
+                            if let Some(movement) = self.movement.get(&(key.modifiers, key.code)) {
+                                match movement {
+                                    &(Movement::Left,   Dimension::X, false)    => self.game.move_in_field(|f| f.move_left_x()),
+                                    &(Movement::Left,   Dimension::X, true)     => self.game.move_in_field(|f| f.move_left_end_x()),
+                                    &(Movement::Right,  Dimension::X, false)    => self.game.move_in_field(|f| f.move_right_x()),
+                                    &(Movement::Right,  Dimension::X, true)     => self.game.move_in_field(|f| f.move_right_end_x()),
+                                    &(Movement::Up,     Dimension::Y, false)    => self.game.move_in_field(|f| f.move_up_y()),
+                                    &(Movement::Up,     Dimension::Y, true)     => self.game.move_in_field(|f| f.move_up_end_y()),
+                                    &(Movement::Down,   Dimension::Y, false)    => self.game.move_in_field(|f| f.move_down_y()),
+                                    &(Movement::Down,   Dimension::Y, true)     => self.game.move_in_field(|f| f.move_down_end_y()),
+                                    &(Movement::Left,   Dimension::Z, false)    => self.game.move_in_field(|f| f.move_left_z()),
+                                    &(Movement::Left,   Dimension::Z, true)     => self.game.move_in_field(|f| f.move_left_end_z()),
+                                    &(Movement::Right,  Dimension::Z, false)    => self.game.move_in_field(|f| f.move_right_z()),
+                                    &(Movement::Right,  Dimension::Z, true)     => self.game.move_in_field(|f| f.move_right_end_z()),
+                                    &(Movement::Up,     Dimension::W, false)    => self.game.move_in_field(|f| f.move_up_w()),
+                                    &(Movement::Up,     Dimension::W, true)     => self.game.move_in_field(|f| f.move_up_end_w()),
+                                    &(Movement::Down,   Dimension::W, false)    => self.game.move_in_field(|f| f.move_down_w()),
+                                    &(Movement::Down,   Dimension::W, true)     => self.game.move_in_field(|f| f.move_down_end_w()),
+                                    _ => {},
+                                }
+                            } else {
+                                match (key.modifiers, key.code) {
+                                    (_, KeyCode::Esc | KeyCode::Char('q')) => self.quit(),
+                                    (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
+                                    (_, KeyCode::Char('c')) => {
+                                        self.game.field.state = MinesweeperFieldState::Paused;
+                                        self.game.state = MinesweeperGameState::Controls;
+                                    },
+                                    (_, KeyCode::Char('o')) => {
+                                        self.game.field.state = MinesweeperFieldState::Paused;
+                                        self.game.state = MinesweeperGameState::Settings;
+                                    },
+                                    (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
+                                    (_, KeyCode::Char('n')) => self.game.regenerate_field(),
+                                    (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                                    (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
+                                    (_, KeyCode::Char('U')) => {
+                                        self.game.toggle_sweep_mode();
+                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                    },
+                                    (_, KeyCode::Char('p')) => self.game.field.state = MinesweeperFieldState::Paused,
+                                    (_, KeyCode::Char(' ')) => {
+                                        self.game.field.uncover_cell(self.game.field.loc);
                                         self.game.update_info_cells_uncovered();
-                                    }
-                                },
-                                (KeyModifiers::CONTROL, KeyCode::Char('x')) => self.game.field.clear_marks(),
-                                (KeyModifiers::ALT, KeyCode::Char('x')) => self.game.field.flag_definite_marked_cell(),
-                                (_, KeyCode::Char('x')) => self.game.field.add_mark(self.game.field.loc),
-                                (_, KeyCode::Char('X')) => self.game.field.uncover_black_cell(),
-                                _ => {}
+                                    },
+                                    (_, KeyCode::Char('m') | KeyCode::Char('e')) => {
+                                        self.game.field.toggle_flagged(self.game.field.loc);
+                                        self.game.update_info_mines_flagged();
+                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                    },
+                                    (_, KeyCode::Char('M') | KeyCode::Char('E')) => {
+                                        self.game.field.toggle_flagged_chording(self.game.field.loc);
+                                        self.game.update_info_mines_flagged();
+                                        if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
+                                    },
+                                    (_, KeyCode::Char('g')) => {
+                                        if !matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
+                                            self.game.field.state = MinesweeperFieldState::GaveUp;
+                                        } else {
+                                            self.game.field.do_everywhere(|f, p| f.cell_at(p).unwrap().set_covered(false));
+                                            self.game.field.uncovered_cells = self.game.field.area as u16;
+                                            self.game.update_info_cells_uncovered();
+                                        }
+                                    },
+                                    (KeyModifiers::CONTROL, KeyCode::Char('x')) => self.game.field.clear_marks(),
+                                    (KeyModifiers::ALT, KeyCode::Char('x')) => self.game.field.flag_definite_marked_cell(),
+                                    (_, KeyCode::Char('x')) => self.game.field.add_mark(self.game.field.loc),
+                                    (_, KeyCode::Char('X')) => self.game.field.uncover_black_cell(),
+                                    _ => {}
+                                }
                             }
                         },
                         MinesweeperFieldState::ClickedMine | MinesweeperFieldState::GaveUp | MinesweeperFieldState::Won => {
@@ -2599,78 +2604,91 @@ impl App {
                                                 //often
                 },
                 MinesweeperGameState::Controls => {
-                    match (key.modifiers, key.code) {
-                        (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Running,
-                        (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                        (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.controls.dec_pos(),
-                        (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.controls.inc_pos(),
-                        _ => {}
+                    if let Some(movement) = self.movement.get(&(key.modifiers, key.code)) {
+                        match movement {
+                            &(Movement::Up,     _, _) => self.game.controls.dec_pos(),
+                            &(Movement::Down,   _, _) => self.game.controls.inc_pos(),
+                            _ => {},
+                        }
+                    } else {
+                        match (key.modifiers, key.code) {
+                            (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Running,
+                            (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                            _ => {}
+                        }
                     }
                 },
                 MinesweeperGameState::Settings => {
-                    match (key.modifiers, key.code) {
-                        (_, KeyCode::Esc | KeyCode::Char('q')) => self.game.state = MinesweeperGameState::Running,
-                        (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
-                        (_, KeyCode::Char('o') | KeyCode::Enter) => {
-                            self.game.apply_settings();
-                            self.game.regenerate_field();
-                            self.game.state = MinesweeperGameState::Running;
-                        },
-                        (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => {
-                            self.game.settings.0.get_tuple().1.dec();
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Right | KeyCode::Char('l') | KeyCode::Char('L') | KeyCode::Char('d') | KeyCode::Char('D') | KeyCode::Char('+')) => {
-                            self.game.settings.0.get_tuple().1.inc();
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.settings.0.dec_pos_wrap(),
-                        (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.settings.0.inc_pos_wrap(),
-                        (_, KeyCode::Char('0')) => {
-                            self.game.settings.0.get_tuple().1.append(0);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('1')) => {
-                            self.game.settings.0.get_tuple().1.append(1);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('2')) => {
-                            self.game.settings.0.get_tuple().1.append(2);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('3')) => {
-                            self.game.settings.0.get_tuple().1.append(3);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('4')) => {
-                            self.game.settings.0.get_tuple().1.append(4);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('5')) => {
-                            self.game.settings.0.get_tuple().1.append(5);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('6')) => {
-                            self.game.settings.0.get_tuple().1.append(6);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('7')) => {
-                            self.game.settings.0.get_tuple().1.append(7);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('8')) => {
-                            self.game.settings.0.get_tuple().1.append(8);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        (_, KeyCode::Char('9')) => {
-                            self.game.settings.0.get_tuple().1.append(9);
-                            self.game.settings.0.recalc_constraint_len();
-                        },
-                        //idk if i could've done that better...
-                        (_, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('t') | KeyCode::Char('T')) => self.game.settings.0.get_tuple().1.set_bool(true),
-                        (_, KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('f') | KeyCode::Char('F')) => self.game.settings.0.get_tuple().1.set_bool(false),
-                        (_, KeyCode::Delete | KeyCode::Backspace) => self.game.settings.0.get_tuple().1.del(),
-                        _ => {}
+                    if let Some(movement) = self.movement.get(&(key.modifiers, key.code)) {
+                        match movement {
+                            &(Movement::Left,   _, _) => { //make sure to readd '+' and '-' for inc
+                                                           //and dec
+                                self.game.settings.0.get_tuple().1.dec();
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            &(Movement::Right,  _, _) => {
+                                self.game.settings.0.get_tuple().1.inc();
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            &(Movement::Up,     _, _) => self.game.settings.0.dec_pos(),
+                            &(Movement::Down,   _, _) => self.game.settings.0.inc_pos(),
+                            _ => {},
+                        }
+                    } else {
+                        match (key.modifiers, key.code) {
+                            (_, KeyCode::Esc | KeyCode::Char('q')) => self.game.state = MinesweeperGameState::Running,
+                            (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
+                            (_, KeyCode::Char('o') | KeyCode::Enter) => {
+                                self.game.apply_settings();
+                                self.game.regenerate_field();
+                                self.game.state = MinesweeperGameState::Running;
+                            },
+                            (_, KeyCode::Char('0')) => {
+                                self.game.settings.0.get_tuple().1.append(0);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('1')) => {
+                                self.game.settings.0.get_tuple().1.append(1);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('2')) => {
+                                self.game.settings.0.get_tuple().1.append(2);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('3')) => {
+                                self.game.settings.0.get_tuple().1.append(3);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('4')) => {
+                                self.game.settings.0.get_tuple().1.append(4);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('5')) => {
+                                self.game.settings.0.get_tuple().1.append(5);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('6')) => {
+                                self.game.settings.0.get_tuple().1.append(6);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('7')) => {
+                                self.game.settings.0.get_tuple().1.append(7);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('8')) => {
+                                self.game.settings.0.get_tuple().1.append(8);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            (_, KeyCode::Char('9')) => {
+                                self.game.settings.0.get_tuple().1.append(9);
+                                self.game.settings.0.recalc_constraint_len();
+                            },
+                            //idk if i could've done that better...
+                            (_, KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('t') | KeyCode::Char('T')) => self.game.settings.0.get_tuple().1.set_bool(true),
+                            (_, KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('f') | KeyCode::Char('F')) => self.game.settings.0.get_tuple().1.set_bool(false),
+                            (_, KeyCode::Delete | KeyCode::Backspace) => self.game.settings.0.get_tuple().1.del(),
+                            _ => {}
+                        }
                     }
                 },
                 MinesweeperGameState::TooSmall => {
