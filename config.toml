@@ -1,6 +1,6 @@
 [keymap]
+quit_all = "ctrl-c"
 quit = ["q", "ESC"]
-quit_all = "crtl+c"
 controls = "c"
 settings = "o"
 
@@ -39,15 +39,15 @@ y = ["shift-downarrow", "J"]
 w = ["S", "alt-j"]
 
 [keymap.game]
-retry = "r"
 new = "n"
+retry = "r"
 free = "f"
 uncover = " "
 capitulate = "g"
 flag = ["m", "e"]
 flag_chording = ["M", "E"]
 pause = "p"
-save = "crtl-o"
+save = "ctrl-o"
 
 [keymap.game.toggle]
 info = "i"
@@ -55,10 +55,14 @@ delta = "u"
 sweep = "U"
 
 [keymap.game.mark]
-clear = "ctrl-x"
-flag = "alt-x"
 set = "x"
 uncover = "X"
+flag = "alt-x"
+clear = "ctrl-x"
+
+#[keymap.settings]
+#save = "enter"
+#maybe add y|n?
 
 [style]
 
