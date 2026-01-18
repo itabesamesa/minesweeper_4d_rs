@@ -1930,7 +1930,10 @@ fn main() -> color_eyre::Result<()> {
     let mut seed = 0;
     let mut capture_mouse = false;
     let mut load_file = false;
-    let mut dir = UserDirs::new().unwrap().download_dir().unwrap().to_path_buf();
+    let mut dir = match UserDirs::new().unwrap().download_dir() {
+        Some(d) => Some(d.to_path_buf()),
+        None => None,
+    };//.unwrap().to_path_buf();
     let mut file_name = String::new();
     let mut args = env::args();
     let Some(program) = args.next() else {panic!("WTF?")};
@@ -1950,7 +1953,10 @@ fn main() -> color_eyre::Result<()> {
                 println!("  -s, --seed                Set seed. An unsigned integer");
                 println!("  -r, --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
                 println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -o, --dir                 Where to output save files. Default is \"{}\"", dir.to_str().unwrap());
+                match dir {
+                    Some(d) => println!("  -o, --dir                 Where to output save files. Default is \"{}\"", d.to_str().unwrap()),
+                    None => {},
+                }
                 println!("Default settings as a command");
                 println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -r t -c f");
                 println!("Classic Minesweeper as a command... Weirdo...");
@@ -2039,9 +2045,10 @@ fn main() -> color_eyre::Result<()> {
                 }
             },
             "-o" | "--dir" => {
-                dir = PathBuf::from(&args.next()
+                let tmp = PathBuf::from(&args.next()
                     .expect(format!("You must provide a directory for argument \"{}\"", arg).as_str()));
-                if !dir.is_dir() {panic!("\"{}\" is not a directory", dir.to_str().unwrap());}
+                if !tmp.is_dir() {panic!("\"{}\" is not a directory", tmp.to_str().unwrap());}
+                dir = Some(tmp);
             },
             &_ => {
                 load_file = true;
@@ -2064,6 +2071,7 @@ pub struct App {
     game: MinesweeperGame,
     area: Rect,
     capture_mouse: bool,
+    enable_save: bool,
     dir: PathBuf,
 }
 
@@ -2074,10 +2082,16 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, rand_seed: bool, set_seed: bool, seed: u64, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
+    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, rand_seed: bool, set_seed: bool, seed: u64, capture_mouse: bool, load_file: bool, file_name: String, dir: Option<PathBuf>) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
-        self.dir = dir.clone();
+        match dir {
+            Some(d) => {
+                self.enable_save = true;
+                self.dir = d.clone();
+            },
+            None => self.enable_save = false,
+        }
         if load_file {
             self.game.load_file(file_name, show_info);
         } else {
@@ -2307,7 +2321,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => if self.enable_save {self.game.save_game(self.dir.clone())},
                             (_, KeyCode::Char('c')) => {
                                 self.game.field.state = MinesweeperFieldState::Paused;
                                 self.game.state = MinesweeperGameState::Controls;
