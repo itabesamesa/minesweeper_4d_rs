@@ -1566,19 +1566,19 @@ impl MinesweeperGame {
         self.field.init(dim, mines, delta_mode, sweep_mode, seed);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
-        self.set_info();
-        self.controls = MinesweeperGame::get_controls();
-        self.settings = self.get_settings();
+        self.set_info((Alignment::Left, Alignment::Left));
+        self.controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
+        self.settings = self.get_settings((Alignment::Left, Alignment::Left), (Alignment::Left, Alignment::Left));
     }
 
-    fn set_info(&mut self) {
-        self.info = self.get_info(); // 10 cause it looks good...
+    fn set_info(&mut self, alignment: (Alignment, Alignment)) {
+        self.info = self.get_info(alignment); // 10 cause it looks good...
         self.info_panel_min_width = self.info.constraint_len_key+2+self.info.constraint_len_value;
         self.info_panel_max_width = self.info.constraint_len_key+10+self.info.constraint_len_value;
     }
 
-    fn get_controls() -> KeyValueList<String> {
-        KeyValueList::new(true, "Game Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
+    fn get_controls(alignment: (Alignment, Alignment)) -> KeyValueList<String> {
+        KeyValueList::new(true, "Game Controls".to_string(), alignment, vec![
             ("Quit all:".to_string(),                       "ctrl+c".to_string()),
             ("Quit:".to_string(),                           "q, ESC".to_string()),
             ("Controls:".to_string(),                       "c".to_string()),
@@ -1618,8 +1618,8 @@ impl MinesweeperGame {
         ])
     }
 
-    fn get_info(&self) -> KeyValueList<String> {
-        KeyValueList::new(false, "Game Info".to_string(), (Alignment::Left, Alignment::Left), vec![
+    fn get_info(&self, alignment: (Alignment, Alignment)) -> KeyValueList<String> {
+        KeyValueList::new(false, "Game Info".to_string(), alignment, vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
             ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
@@ -1633,9 +1633,9 @@ impl MinesweeperGame {
         ])
     }
 
-    fn get_settings(&self) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
+    fn get_settings(&self, alignment_settings: (Alignment, Alignment), alignment_controls: (Alignment, Alignment)) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
         (
-            KeyValueList::new(true, "Game Settings".to_string(), (Alignment::Left, Alignment::Left), vec![
+            KeyValueList::new(true, "Game Settings".to_string(), alignment_settings, vec![
                 ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, min: 0, max: 0}),
                 ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u64, min: 1, max: i16::MAX as u64}),
                 ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u64, min: 1, max: i16::MAX as u64}),
@@ -1648,7 +1648,7 @@ impl MinesweeperGame {
                 ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1, min: 0, max: 1}),
                 ("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0, min: 0, max: u64::MAX}),
             ]),
-            KeyValueList::new(false, "Settings Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
+            KeyValueList::new(false, "Settings Controls".to_string(), alignment_controls, vec![
                 ("Exit".to_string(),             "q, ESC".to_string()),
                 ("Controls:".to_string(),        "c".to_string()),
                 ("Save and exit".to_string(),    "o".to_string()),
@@ -1791,7 +1791,7 @@ Grid:
         if !(path.exists() && path.is_file()) {
             panic!("Path \"{file_name}\" doesn't exist or isn't a file");
         } //unwrap already panics, i just don't like the error message, sooo
-        let info = MinesweeperGame::default().get_info();
+        let info = MinesweeperGame::default().get_info((Alignment::Left, Alignment::Left));
         let binding = read_to_string(path).unwrap();
         let mut lines = binding.lines();
         let mut found_grid = false;
@@ -1960,9 +1960,9 @@ Grid:
         if loc.w+1 != self.field.dim.w {panic!("Inconsistent w dimension in file \"{}\"", file_name);}
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
-        self.set_info();
-        self.controls = MinesweeperGame::get_controls();
-        self.settings = self.get_settings();
+        self.set_info((Alignment::Left, Alignment::Left));
+        self.controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
+        self.settings = self.get_settings((Alignment::Left, Alignment::Left), (Alignment::Left, Alignment::Left));
         self.field.set_active_cell(true);
     }
 }
@@ -1976,10 +1976,10 @@ fn alignment_from_str(ali: &str) -> Option<Alignment> { //change to result
     }
 }
 
-fn config_style_alignment(map: HashMap<String, Value>) -> (Alignment, Alignment) {
+fn config_style_alignment(tab: Map<String, Value>) -> (Alignment, Alignment) {
     (
-        alignment_from_str(&map.get("key").unwrap().clone().into_string().unwrap()).unwrap(),
-        alignment_from_str(&map.get("value").unwrap().clone().into_string().unwrap()).unwrap()
+        alignment_from_str(&tab.get_string("key").unwrap().clone().into_string().unwrap()).unwrap(),
+        alignment_from_str(&tab.get_string("value").unwrap().clone().into_string().unwrap()).unwrap()
     )
 }
 
@@ -2150,14 +2150,6 @@ fn main() -> color_eyre::Result<()> {
         .add_source(config::Environment::with_prefix("APP"))
         .build()
         .unwrap();
-
-    // Print out our settings (as a HashMap)
-    /*println!(
-        "{:?}",
-        settings
-            .try_deserialize::<HashMap<String, String>>()
-            .unwrap()
-    );*/
     let mut mines: u16 = 20;
     let mut show_info = true;
     let mut delta_mode = true;
@@ -2174,7 +2166,7 @@ fn main() -> color_eyre::Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "-?" | "--help" => {
-                let controls = MinesweeperGame::get_controls();
+                let controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
                 println!("{}", controls.title);
                 print!("{}", controls.as_str(2));
                 println!("Commandline arguments");
@@ -2291,8 +2283,13 @@ fn main() -> color_eyre::Result<()> {
     let result = App::new(
         config_keymap_global(settings.get_table("keymap").unwrap()),
         config_keymap_movement(settings.get_table("keymap.movement").unwrap()),
-        config_keymap_game(settings.get_table("keymap.game").unwrap())
-        ).run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir);
+        config_keymap_game(settings.get_table("keymap.game").unwrap()),
+        ).run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir,
+            config_style_alignment(settings.get_table("style.info").unwrap()),
+            config_style_alignment(settings.get_table("style.controls").unwrap()),
+            config_style_alignment(settings.get_table("style.settings.settings").unwrap()),
+            config_style_alignment(settings.get_table("style.settings.controls").unwrap())
+        );
     ratatui::restore();
     result
 }
@@ -2313,7 +2310,11 @@ pub struct App {
 
 impl App {
     /// Construct a new instance of [`App`].
-    pub fn new(global_keymap: HashMap<(KeyModifiers, KeyCode), GlobalFunction>, movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>, game_keymap: HashMap<(KeyModifiers, KeyCode), GameFunction>) -> Self {
+    pub fn new(
+        global_keymap: HashMap<(KeyModifiers, KeyCode), GlobalFunction>,
+        movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>,
+        game_keymap: HashMap<(KeyModifiers, KeyCode), GameFunction>,
+        ) -> Self {
         let mut app = Self::default();
         app.global_keymap = global_keymap;
         app.movement_keymap = movement_keymap;
@@ -2322,7 +2323,18 @@ impl App {
     }
 
     /// Run the application's main loop.
-    pub fn run(mut self, mut terminal: DefaultTerminal, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, rand_seed: bool, set_seed: bool, seed: u64, capture_mouse: bool, load_file: bool, file_name: String, dir: PathBuf) -> Result<()> {
+    pub fn run(
+        mut self, mut terminal: DefaultTerminal,
+        dim: Point, mines: u16,
+        show_info: bool, delta_mode: bool, sweep_mode: bool, rand_seed: bool, set_seed: bool,
+        seed: u64,
+        capture_mouse: bool, load_file: bool,
+        file_name: String, dir: PathBuf,
+        alignment_info: (Alignment, Alignment),
+        alignment_controls: (Alignment, Alignment),
+        alignment_settings_settings: (Alignment, Alignment),
+        alignment_settings_controls: (Alignment, Alignment)
+        ) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
         self.dir = dir.clone();
@@ -2477,7 +2489,7 @@ impl App {
                             },
                             _ => {},
                         }
-                    } 
+                    }
                 }
             },
             MinesweeperGameState::Controls => {
