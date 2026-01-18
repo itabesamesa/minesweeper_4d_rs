@@ -2389,7 +2389,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('g'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::RevealField,
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => if self.enable_save {self.game.save_game(self.dir.clone())},
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
@@ -2407,7 +2407,7 @@ impl App {
                         match (key.modifiers, key.code) {
                             (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('p'))
                             | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.field.state = MinesweeperFieldState::Running,
-                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
+                            (KeyModifiers::CONTROL, KeyCode::Char('o')) => if self.enable_save {self.game.save_game(self.dir.clone())},
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
