@@ -130,6 +130,7 @@ minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t
 - [ ] Make it possible to win when there are 0 mines
 - [ ] Make game state message part of game instead of field
 - [ ] Config (coming soon tm, currently on a different branch (you'll have to use an earlier commit tho))
+- [ ] Create launch option for people who don't have a Unicode font available (for now install smth like noto)
 
 ## License
 
