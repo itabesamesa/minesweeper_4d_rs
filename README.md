@@ -28,7 +28,7 @@ When the program is run with `--capture_mouse t`, the cursor will track the mous
 
 There is the option of saving your game in a human readable file format. But I haven't tested it extensively. I only added it so that this variant would have every feature of [4d_minesweeper](https://github.com/itabesamesa/4d-minesweeper) in c. Files are saved to your downloads directory by default (run with `-h` and you'll see where that is).
 
-In theory, this program should be OS agnostic (except for seeds https://docs.rs/rand/latest/rand/rngs/struct.StdRng.html ). But I have never tested this on anything other than Linux...
+In theory, this program should be OS agnostic (except for seeds https://docs.rs/rand/latest/rand/rngs/struct.StdRng.html ). But I have never tested this on anything other than Linux... (specifically gentoo and arch)
 
 ### Controls
 
