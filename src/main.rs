@@ -745,9 +745,7 @@ impl MinesweeperField {
         self.mines = mines;
         self.delta_mode = delta_mode;
         self.sweep_mode = sweep_mode;
-        eprintln!("hoola");
         self.area = self.dim.calc_area();
-        eprintln!("oof");
         self.started = Local::now();
         self.duration = Duration::ZERO;
         self.marks = HashMap::new();
