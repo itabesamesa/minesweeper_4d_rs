@@ -1507,7 +1507,8 @@ impl Widget for MinesweeperGame {
                 let field_width = self.field.get_display_width()+2;
                 let field_height = self.field.get_display_height()+2;
                 let text = vec![
-                    "Your terminal is too small".into(),
+                    "Your terminal is too small. Current size:".into(),
+                    format!("{}x{}", area.width, area.height).into(),
                     "Recommened minimum size:".into(),
                     format!("{}x{}", field_width, field_height).into(),
                     "With info panel:".into(),
@@ -2120,6 +2121,10 @@ impl App {
                 EnableMouseCapture
             )?;
         }
+        let mut area = terminal.get_frame().area();
+        area.y += 1;
+        area.height -= 1;
+        self.check_size(area.width, area.height, self.game.state.clone());
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             let start = Instant::now();
@@ -2159,7 +2164,6 @@ impl App {
             frame.area()
         );
         self.area = area;
-        self.check_size(area.width, area.height, self.game.state.clone());
         frame.render_widget(
             self.game.clone(),
             area,
@@ -2188,7 +2192,7 @@ impl App {
                 // it's important to check KeyEventKind::Press to avoid handling key release events
                 Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
                 Event::Mouse(mouse) if self.capture_mouse => self.on_mouse_event(mouse),
-                Event::Resize(width, height) => self.check_size(width, height, MinesweeperGameState::Running),
+                Event::Resize(width, height) => self.check_size(width, height-1, MinesweeperGameState::Running), // -1 cause of title
                 _ => {}
             }
         }
@@ -2292,7 +2296,10 @@ impl App {
                             (KeyModifiers::CONTROL, KeyCode::Char('o')) => self.game.save_game(self.dir.clone()),
                             (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
-                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('i')) => {
+                                self.game.show_info = !self.game.show_info;
+                                self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
+                            },
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
                             (_, KeyCode::Char('U')) => {
                                 self.game.toggle_sweep_mode();
@@ -2346,7 +2353,13 @@ impl App {
                             },
                             (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
-                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('i')) => {
+                                self.game.show_info = !self.game.show_info;
+                                self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
+                                if !matches!(self.game.state, MinesweeperGameState::Running) {
+                                    self.game.field.state = MinesweeperFieldState::Paused;
+                                }
+                            },
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
                             (_, KeyCode::Char('U')) => {
                                 self.game.toggle_sweep_mode();
@@ -2408,7 +2421,10 @@ impl App {
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
-                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('i')) => {
+                                self.game.show_info = !self.game.show_info;
+                                self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
+                            },
                             (_, KeyCode::Char('u')) => self.game.toggle_delta_mode(),
                             (_, KeyCode::Char('U')) => {
                                 self.game.toggle_sweep_mode();
@@ -2426,7 +2442,10 @@ impl App {
                             (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                             (_, KeyCode::Char('r')) => self.game.regenerate_field_same_seed(),
                             (_, KeyCode::Char('n')) => self.game.regenerate_field(),
-                            (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                            (_, KeyCode::Char('i')) => {
+                                self.game.show_info = !self.game.show_info;
+                                self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
+                            },
                             _ => {}
                         }
                     },
@@ -2437,7 +2456,7 @@ impl App {
             MinesweeperGameState::Controls => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c'))
-                    | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
+                    | (KeyModifiers::CONTROL, KeyCode::Char('C')) => self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running),
                     (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
                     (_, KeyCode::Up    | KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('w') | KeyCode::Char('W')) => self.game.controls.dec_pos(),
                     (_, KeyCode::Down  | KeyCode::Char('j') | KeyCode::Char('J') | KeyCode::Char('s') | KeyCode::Char('S')) => self.game.controls.inc_pos(),
@@ -2447,12 +2466,12 @@ impl App {
             MinesweeperGameState::Settings => {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
-                    | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.game.state = MinesweeperGameState::Running,
+                    | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running),
                     (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
                     (_, KeyCode::Char('o') | KeyCode::Enter) => {
                         self.game.apply_settings();
                         self.game.regenerate_field();
-                        self.game.state = MinesweeperGameState::Running;
+                        self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
                     },
                     (_, KeyCode::Left  | KeyCode::Char('h') | KeyCode::Char('H') | KeyCode::Char('a') | KeyCode::Char('A') | KeyCode::Char('-')) => {
                         self.game.settings.0.get_tuple().1.dec();
@@ -2515,7 +2534,12 @@ impl App {
                 match (key.modifiers, key.code) {
                     (_, KeyCode::Esc | KeyCode::Char('q'))
                     | (KeyModifiers::CONTROL, KeyCode::Char('c') | KeyCode::Char('C')) => self.quit(),
-                    (_, KeyCode::Char('i')) => self.game.show_info = !self.game.show_info,
+                    (_, KeyCode::Char('c')) => self.game.state = MinesweeperGameState::Controls,
+                    (_, KeyCode::Char('o')) => self.game.state = MinesweeperGameState::Settings,
+                    (_, KeyCode::Char('i')) => {
+                        self.game.show_info = !self.game.show_info;
+                        self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
+                    },
                     _ => {}
                 }
             }
