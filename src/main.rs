@@ -1330,6 +1330,16 @@ impl MinesweeperField {
     }
 
     fn clear_marks(&mut self) {
+        /*for (_, mark) in &self.marks.clone() { // this would leave empty cells marked
+            self.do_in_neighbourhood(mark.origin, |s, p| {
+                let cell = s.cell_at(p).unwrap();
+                if cell.is_marked {
+                    cell.is_marked = false;
+                    cell.mark.color = Color::Black;
+                    cell.mark.mines = 0;
+                }
+            })
+        }*/
         for cell in &mut self.field { // maybe iterate through marks instead of field... could be
                                       // more efficient
             if cell.is_marked {
@@ -1356,10 +1366,6 @@ impl MinesweeperField {
     fn sweep_mode_str(&self) -> String {
         (if self.sweep_mode {"On"} else {"Off"}).to_string()
     }
-
-    /*fn seed_str(&self) -> String {
-        format!("{}", self.seed)
-    }*/
 
     fn cells_uncovered_str(&self) -> String {
         format!("{}/{}", self.uncovered_cells, (self.area as u16)-self.mines)
