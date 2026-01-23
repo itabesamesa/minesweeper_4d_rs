@@ -149,12 +149,18 @@ impl Point {
     }
 
     fn to_1d(self, dim: Point) -> usize {
-        (((self.w * dim.z + self.z) * dim.y + self.y) * dim.x + self.x).try_into().unwrap()
+        if (Point {x: -1, y: -1, z: -1, w: -1}) < self && (Point {x: -1, y: -1, z: -1, w: -1}) < dim {
+            (((self.w as usize) * (dim.z as usize) + (self.z as usize)) *
+              (dim.y as usize) + (self.y as usize)) *
+             (dim.x as usize) + (self.x as usize)
+        } else {
+            return 0; //should make this an Option<_>...
+        }
         //(((self.x * dim.y + self.y) * dim.z + self.z) * dim.w + self.w).try_into().unwrap()
     }
 
     fn calc_area(self) -> usize {
-        (self.x*self.y*self.z*self.w).try_into().unwrap()
+        (self.x.abs() as usize)*(self.y.abs() as usize)*(self.z.abs() as usize)*(self.w.abs() as usize)
     }
 
     fn offset(self, p: Point) -> Point {
@@ -739,7 +745,9 @@ impl MinesweeperField {
         self.mines = mines;
         self.delta_mode = delta_mode;
         self.sweep_mode = sweep_mode;
+        eprintln!("hoola");
         self.area = self.dim.calc_area();
+        eprintln!("oof");
         self.started = Local::now();
         self.duration = Duration::ZERO;
         self.marks = HashMap::new();
