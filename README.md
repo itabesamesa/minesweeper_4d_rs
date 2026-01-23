@@ -28,7 +28,7 @@ When the program is run with `--capture_mouse t`, the cursor will track the mous
 
 There is the option of saving your game in a human readable file format. But I haven't tested it extensively. I only added it so that this variant would have every feature of [4d_minesweeper](https://github.com/itabesamesa/4d-minesweeper) in c. Files are saved to your downloads directory by default (run with `-h` and you'll see where that is).
 
-In theory, this program should be OS agnostic (except for seeds https://docs.rs/rand/latest/rand/rngs/struct.StdRng.html ). But I have never tested this on anything other than Linux... (specifically gentoo and arch)
+In theory, this program should be OS agnostic ( except for seeds https://docs.rs/rand/latest/rand/rngs/struct.StdRng.html ). But I have never tested this on anything other than Linux... (specifically gentoo and arch and void)
 
 ### Controls
 
@@ -128,7 +128,7 @@ minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t
 - [x] Editable settings
 - [x] Make Controls scrollable _custom implementation instead of ratatui Scrollbar_
 - [ ] Make it possible to win when there are 0 mines
-- [ ] Make game state message part of game instead of field
+- [ ] ~~Make game state message part of game instead of field~~
 - [ ] Config (coming soon tm, currently on a different branch (you'll have to use an earlier commit tho))
 - [ ] Create launch option for people who don't have a Unicode font available (for now install smth like noto)
 
