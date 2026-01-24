@@ -480,6 +480,39 @@ impl Mark {
 }
 
 #[derive(Copy, Clone, Debug)]
+struct MinesweeperCellColors {
+    cursor: Color,
+    wrong: Color,
+    text: Color,
+    light_covered_default: Color,
+    light_uncovered_default: Color,
+    light_covered_neighbour: Color,
+    light_uncovered_neighbour: Color,
+    dark_covered_default: Color,
+    dark_uncovered_default: Color,
+    dark_covered_neighbour: Color,
+    dark_uncovered_neighbour: Color,
+}
+
+impl Default for MinesweeperCellColors {
+    fn default() -> MinesweeperCellColors {
+        MinesweeperCellColors {
+            cursor: Color::Rgb(0xff, 0x2a, 0xff),
+            wrong: Color::Red,
+            text: Color::Black,
+            light_covered_default: Color::Rgb(0x66, 0x66, 0x66),
+            light_uncovered_default: Color::Rgb(0xc6, 0xc6, 0xc6),
+            light_covered_neighbour: Color::Rgb(0x80, 0x73, 0x80),
+            light_uncovered_neighbour: Color::Rgb(0xb3, 0xa1, 0xb3),
+            dark_covered_default: Color::Rgb(0x3b, 0x3b, 0x3b),
+            dark_uncovered_default: Color::Rgb(0xb8, 0xb8, 0xb8),
+            dark_covered_neighbour: Color::Rgb(0x59, 0x50, 0x59),
+            dark_uncovered_neighbour: Color::Rgb(0xa6, 0x95, 0xa6),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 struct MinesweeperCell {
     coord: Point,
     is_bomb: bool,
@@ -530,19 +563,19 @@ impl MinesweeperCell {
             }, Style::default().fg(fg).bg(if self.is_active {Color::Rgb(255, 42, 255)} else {self.mark.color}))
     }
 
-    fn render_rel(self, area: Rect, buf: &mut Buffer) {
+    fn render_rel(self, area: Rect, buf: &mut Buffer, colors: MinesweeperCellColors) {
         if self.is_marked && !self.is_flagged {
             self.render_mark(area, buf);
         } else {
-            buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+            buf.set_string(area.left(), area.top(), self.get_rel_string(), Style::default().fg(colors.text).bg(self.get_color(colors)));
         }
     }
 
-    fn render_abs(self, area: Rect, buf: &mut Buffer) {
+    fn render_abs(self, area: Rect, buf: &mut Buffer, colors: MinesweeperCellColors) {
         if self.is_marked && !self.is_flagged {
             self.render_mark(area, buf);
         } else {
-            buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(Color::Black).bg(self.get_color()));
+            buf.set_string(area.left(), area.top(), self.get_abs_string(), Style::default().fg(colors.text).bg(self.get_color(colors)));
         }
     }
 
@@ -600,23 +633,23 @@ impl MinesweeperCell {
         }
     }
 
-    fn get_color(&self) -> Color {
+    fn get_color(&self, colors: MinesweeperCellColors) -> Color {
         if self.is_active {
-            Color::Rgb(255, 42, 255)
+            colors.cursor
         } else {
             if self.is_covered {
                 if self.in_active_neighbourhood {
-                    self.get_light_dark_color(Color::Rgb(128, 115, 128), Color::Rgb(89, 80, 89))
+                    self.get_light_dark_color(colors.light_covered_neighbour, colors.dark_covered_neighbour)
                 } else {
-                    self.get_light_dark_color(Color::Rgb(0x66, 0x66, 0x66), Color::Rgb(0x3b, 0x3b, 0x3b))
+                    self.get_light_dark_color(colors.light_covered_default, colors.dark_covered_default)
                 }
             } else {
                 if self.is_flagged && !self.is_bomb {
-                    Color::Red
+                    colors.wrong
                 } else if self.in_active_neighbourhood {
-                    self.get_light_dark_color(Color::Rgb(179, 161, 179), Color::Rgb(166, 149, 166))
+                    self.get_light_dark_color(colors.light_uncovered_neighbour, colors.dark_uncovered_neighbour)
                 } else {
-                    self.get_light_dark_color(Color::Rgb(0xc6, 0xc6, 0xc6), Color::Rgb(0xb8, 0xb8, 0xb8))
+                    self.get_light_dark_color(colors.light_uncovered_default, colors.dark_uncovered_default)
                 }
             }
         }
@@ -694,6 +727,7 @@ struct MinesweeperField {
     duration: Duration,
     field: Vec<MinesweeperCell>,
     marks: HashMap<Color, Mark>,
+    colors: MinesweeperCellColors,
 }
 
 impl Default for MinesweeperField {
@@ -714,6 +748,7 @@ impl Default for MinesweeperField {
             duration: Duration::ZERO,
             field: Vec::default(),
             marks: HashMap::new(),
+            colors: MinesweeperCellColors::default(),
             //..Default::default() // this causes a stack overflow, so tedious way it is?
         }
     }
@@ -748,9 +783,9 @@ impl Widget for MinesweeperField {
                         for x in 0..self.dim.x {
                             let cell_area = cells[(y*self.dim.x+x) as usize];
                             if self.delta_mode {
-                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_rel(cell_area, buf);
+                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_rel(cell_area, buf, self.colors);
                             } else {
-                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_abs(cell_area, buf);
+                                self.field[Point {x: x, y: y, z: z, w: w}.to_1d(self.dim)].render_abs(cell_area, buf, self.colors);
                             }
                         }
                     }
@@ -1978,26 +2013,127 @@ fn alignment_from_str(ali: &str) -> Option<Alignment> { //change to result
 
 fn config_style_alignment(tab: Map<String, Value>) -> (Alignment, Alignment) {
     (
-        alignment_from_str(&tab.get_string("key").unwrap().clone().into_string().unwrap()).unwrap(),
-        alignment_from_str(&tab.get_string("value").unwrap().clone().into_string().unwrap()).unwrap()
+        alignment_from_str(
+            &tab.get("key")
+                .expect("Alignment in style must have \"key\" and \"value\" fields").clone().into_string()
+                .expect("Alignment in style must be as string of: left, right or center"))
+            .expect("Alignment in style must be as string of: left, right or center"),
+        alignment_from_str(
+            &tab.get("value")
+                .expect("Alignment in style must have \"key\" and \"value\" fields").clone().into_string()
+                .expect("Alignment in style must be as string of: left, right or center"))
+            .expect("Alignment in style must be as string of: left, right or center")
     )
 }
 
-fn color_from_str(c: &str) -> Option<Color> { //change to result
+fn color_from_str(c: &str) -> Color { //change to result
     if c.starts_with("#") {
         let without_prefix = c.trim_start_matches("#");
-        let rgb = i64::from_str_radix(without_prefix, 16).unwrap();
-        return Some(Color::Rgb(
+        let rgb = i64::from_str_radix(without_prefix, 16).expect("Colors must be either in hexadecimal RGB format (i.e.: \"#ff2aff\") or a name");
+        return Color::Rgb(
                 ((rgb >> 16) & 0xff).try_into().unwrap(),
                 ((rgb >> 8) & 0xff).try_into().unwrap(),
-                (rgb & 0xff).try_into().unwrap())
-            );
+                (rgb & 0xff).try_into().unwrap());
     } else {
-        return match Color::from_str(c) { // pls change... this is stupid...
-            Ok(color) => Some(color),
-            Err(_) => None,
-        };
+        return Color::from_str(c).unwrap();
     }
+}
+
+fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
+    let mut colors = MinesweeperCellColors::default();
+    match tab.get("cursor") {
+        Some(c) => colors.cursor = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+        None => {}
+    }
+    match tab.get("wrong") {
+        Some(c) => colors.wrong = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+        None => {}
+    }
+    match tab.get("text") {
+        Some(c) => colors.text = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+        None => {}
+    }
+    match tab.get("light") {
+        Some(t) => {
+            t.clone().into_table().and_then(|light| {
+                match light.get("covered") {
+                    Some(t) => {
+                        t.clone().into_table().and_then(|covered| {
+                            match covered.get("default") {
+                                Some(c) => colors.light_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            match covered.get("neighbour") {
+                                Some(c) => colors.light_covered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            Ok(())
+                        });
+                    },
+                    None => {}
+                }
+                match light.get("uncovered") {
+                    Some(t) => {
+                        t.clone().into_table().and_then(|uncovered| {
+                            match uncovered.get("default") {
+                                Some(c) => colors.light_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            match uncovered.get("neighbour") {
+                                Some(c) => colors.light_uncovered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            Ok(())
+                        });
+                    },
+                    None => {}
+                }
+                Ok(())
+            });
+        },
+        None => {}
+    }
+    match tab.get("dark") {
+        Some(t) => {
+            t.clone().into_table().and_then(|dark| {
+                match dark.get("covered") {
+                    Some(t) => {
+                        t.clone().into_table().and_then(|covered| {
+                            match covered.get("default") {
+                                Some(c) => colors.dark_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            match covered.get("neighbour") {
+                                Some(c) => colors.dark_covered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            Ok(())
+                        });
+                    },
+                    None => {}
+                }
+                match dark.get("uncovered") {
+                    Some(t) => {
+                        t.clone().into_table().and_then(|uncovered| {
+                            match uncovered.get("default") {
+                                Some(c) => colors.dark_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            match uncovered.get("neighbour") {
+                                Some(c) => colors.dark_uncovered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
+                                None => {}
+                            }
+                            Ok(())
+                        });
+                    },
+                    None => {}
+                }
+                Ok(())
+            });
+        },
+        None => {}
+    }
+    return colors;
 }
 
 fn keycode_from_string(s: String) -> (KeyModifiers, KeyCode) { //change to result
@@ -2150,6 +2286,7 @@ fn main() -> color_eyre::Result<()> {
         .add_source(config::Environment::with_prefix("APP"))
         .build()
         .unwrap();
+    let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
     let mut mines: u16 = 20;
     let mut show_info = true;
     let mut delta_mode = true;
@@ -2285,10 +2422,11 @@ fn main() -> color_eyre::Result<()> {
         config_keymap_movement(settings.get_table("keymap.movement").unwrap()),
         config_keymap_game(settings.get_table("keymap.game").unwrap()),
         ).run(terminal, dim, mines, show_info, delta_mode, sweep_mode, rand_seed, set_seed, seed, capture_mouse, load_file, file_name, dir,
-            config_style_alignment(settings.get_table("style.info").unwrap()),
-            config_style_alignment(settings.get_table("style.controls").unwrap()),
-            config_style_alignment(settings.get_table("style.settings.settings").unwrap()),
-            config_style_alignment(settings.get_table("style.settings.controls").unwrap())
+            config_style_alignment(settings.get_table("style.info.alignment").unwrap()),
+            config_style_alignment(settings.get_table("style.controls.alignment").unwrap()),
+            config_style_alignment(settings.get_table("style.settings.settings.alignment").unwrap()),
+            config_style_alignment(settings.get_table("style.settings.controls.alignment").unwrap()),
+            config_style_game_color(settings.get_table("style.game.color").unwrap())
         );
     ratatui::restore();
     result
@@ -2333,7 +2471,8 @@ impl App {
         alignment_info: (Alignment, Alignment),
         alignment_controls: (Alignment, Alignment),
         alignment_settings_settings: (Alignment, Alignment),
-        alignment_settings_controls: (Alignment, Alignment)
+        alignment_settings_controls: (Alignment, Alignment),
+        colors: MinesweeperCellColors
         ) -> Result<()> {
         self.running = true;
         self.capture_mouse = capture_mouse;
@@ -2344,6 +2483,11 @@ impl App {
             self.game.init(dim, mines, show_info, delta_mode, sweep_mode, if set_seed {seed} else {rand::random::<u64>()});
         }
         self.game.settings.0.array[9].1.value = if rand_seed {1} else {0};
+        self.game.info.alignment = alignment_info;
+        self.game.controls.alignment = alignment_controls;
+        self.game.settings.0.alignment = alignment_settings_settings;
+        self.game.settings.1.alignment = alignment_settings_controls;
+        self.game.field.colors = colors;
         if capture_mouse {
             execute!(
                 std::io::stdout(),

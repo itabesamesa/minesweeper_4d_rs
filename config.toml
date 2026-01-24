@@ -70,20 +70,20 @@ clear = "ctrl-x"
 
 [style.game.color]
 cursor = "#ff2aff"
-false = "red"
+wrong = "red"
 text = "black"
 
 [style.game.color.light]
-coverd.neighbour = "#807380"
-uncoverd.neighbour = "#b3a1b3"
-coverd.default = "#666666"
-uncoverd.default = "#c6c6c6"
+covered.default = "#666666"
+uncovered.default = "#c6c6c6"
+covered.neighbour = "#807380"
+uncovered.neighbour = "#b3a1b3"
 
 [style.game.color.dark]
-coverd.neighbour = "#595059"
-uncoverd.neighbour = "#a695a6"
-coverd.default = "#3b3b3b"
-uncoverd.default = "#b8b8b8"
+covered.default = "#3b3b3b"
+uncovered.default = "#b8b8b8"
+covered.neighbour = "#595059"
+uncovered.neighbour = "#a695a6"
 
 [style.info]
 alignment.key = "Left"
