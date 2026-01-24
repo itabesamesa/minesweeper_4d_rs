@@ -104,7 +104,7 @@ enum SettingsOptionTypes {
 }
 
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-enum Dimension {
+pub enum Dimension {
     #[default] X,
     Y,
     Z,
@@ -112,7 +112,7 @@ enum Dimension {
 }
 
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-enum Movement {
+pub enum Movement {
     #[default] Left,
     Right,
     Up,
@@ -120,7 +120,7 @@ enum Movement {
 }
 
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-enum GameFunction {
+pub enum GameFunction {
     #[default] New,
     Retry,
     Free,
@@ -140,7 +140,7 @@ enum GameFunction {
 }
 
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
-enum GlobalFunction {
+pub enum GlobalFunction {
     #[default] QuitAll,
     Quit,
     Controls,
@@ -480,7 +480,7 @@ impl Mark {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct MinesweeperCellColors {
+pub struct MinesweeperCellColors {
     cursor: Color,
     wrong: Color,
     text: Color,
@@ -2055,10 +2055,10 @@ fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
     }
     match tab.get("light") {
         Some(t) => {
-            t.clone().into_table().and_then(|light| {
+            let _ = t.clone().into_table().and_then(|light| {
                 match light.get("covered") {
                     Some(t) => {
-                        t.clone().into_table().and_then(|covered| {
+                        let _ = t.clone().into_table().and_then(|covered| {
                             match covered.get("default") {
                                 Some(c) => colors.light_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
                                 None => {}
@@ -2074,7 +2074,7 @@ fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
                 }
                 match light.get("uncovered") {
                     Some(t) => {
-                        t.clone().into_table().and_then(|uncovered| {
+                        let _ = t.clone().into_table().and_then(|uncovered| {
                             match uncovered.get("default") {
                                 Some(c) => colors.light_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
                                 None => {}
@@ -2095,10 +2095,10 @@ fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
     }
     match tab.get("dark") {
         Some(t) => {
-            t.clone().into_table().and_then(|dark| {
+            let _ = t.clone().into_table().and_then(|dark| {
                 match dark.get("covered") {
                     Some(t) => {
-                        t.clone().into_table().and_then(|covered| {
+                        let _ = t.clone().into_table().and_then(|covered| {
                             match covered.get("default") {
                                 Some(c) => colors.dark_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
                                 None => {}
@@ -2114,7 +2114,7 @@ fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
                 }
                 match dark.get("uncovered") {
                     Some(t) => {
-                        t.clone().into_table().and_then(|uncovered| {
+                        let _ = t.clone().into_table().and_then(|uncovered| {
                             match uncovered.get("default") {
                                 Some(c) => colors.dark_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
                                 None => {}
