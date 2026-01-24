@@ -1,0 +1,102 @@
+[keymap]
+quit_all = "ctrl-c"
+quit = ["q", "ESC"]
+controls = "c"
+settings = "o"
+
+[keymap.movement]
+
+[keymap.movement.left]
+x = ["leftarrow", "h"]
+z = ["a", "ctrl-h"]
+
+[keymap.movement.left.start]
+x = ["shift-leftarrow", "H"]
+z = ["A", "H"]
+
+[keymap.movement.right]
+x = ["rightarrow", "l"]
+z = ["d", "ctrl-d"]
+
+[keymap.movement.right.end]
+x = ["shift-rightarrow", "L"]
+z = ["D", "alt-d"]
+
+[keymap.movement.up]
+y = ["uparrow", "k"]
+w = ["w", "ctrl-k"]
+
+[keymap.movement.up.top]
+y = ["shift-uparrow", "K"]
+w = ["W", "alt-k"]
+
+[keymap.movement.down]
+y = ["downarrow", "j"]
+w = ["s", "ctrl-j"]
+
+[keymap.movement.down.bottom]
+y = ["shift-downarrow", "J"]
+w = ["S", "alt-j"]
+
+[keymap.game]
+new = "n"
+retry = "r"
+free = "f"
+uncover = " "
+capitulate = "g"
+flag = ["m", "e"]
+flag_chording = ["M", "E"]
+pause = "p"
+save = "ctrl-o"
+
+[keymap.game.toggle]
+info = "i"
+delta = "u"
+sweep = "U"
+
+[keymap.game.mark]
+set = "x"
+uncover = "X"
+flag = "alt-x"
+clear = "ctrl-x"
+
+#[keymap.settings]
+#save = "enter"
+#maybe add y|n?
+
+[style]
+
+[style.game]
+
+[style.game.color]
+cursor = "#ff2aff"
+wrong = "red"
+text = "black"
+
+[style.game.color.light]
+covered.default = "#666666"
+uncovered.default = "#c6c6c6"
+covered.neighbour = "#807380"
+uncovered.neighbour = "#b3a1b3"
+
+[style.game.color.dark]
+covered.default = "#3b3b3b"
+uncovered.default = "#b8b8b8"
+covered.neighbour = "#595059"
+uncovered.neighbour = "#a695a6"
+
+[style.info]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.controls]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.settings.settings]
+alignment.key = "Left"
+alignment.value = "Left"
+
+[style.settings.controls]
+alignment.key = "Left"
+alignment.value = "Left"
