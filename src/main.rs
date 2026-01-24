@@ -1588,7 +1588,7 @@ impl Widget for MinesweeperGame {
                 let field_width = self.field.get_display_width()+2;
                 let field_height = self.field.get_display_height()+2;
                 let text = vec![
-                    "Your terminal is too small. Current size:".into(),
+                    format!("Your terminal is too small. Current size ({} info panel):", if self.show_info {"with"} else {"without"}).into(),
                     format!("{}x{}", area.width, area.height).into(),
                     "Recommened minimum size:".into(),
                     format!("{}x{}", field_width, field_height).into(),
@@ -2054,97 +2054,69 @@ fn color_from_str(c: &str) -> Color { //change to result
 
 fn config_style_game_color(tab: Map<String, Value>) -> MinesweeperCellColors {
     let mut colors = MinesweeperCellColors::default();
-    match tab.get("cursor") {
-        Some(c) => colors.cursor = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-        None => {}
+    let str_to_color = |c: Value| -> Color {color_from_str(&c.into_string().expect("Colors must be strings"))};
+    if let Some(c) = tab.get("cursor") {
+        colors.cursor = str_to_color(c.clone());
     }
-    match tab.get("wrong") {
-        Some(c) => colors.wrong = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-        None => {}
+    if let Some(c) = tab.get("wrong") {
+        colors.wrong = str_to_color(c.clone());
     }
-    match tab.get("text") {
-        Some(c) => colors.text = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-        None => {}
+    if let Some(c) = tab.get("text") {
+        colors.text = str_to_color(c.clone());
     }
-    match tab.get("light") {
-        Some(t) => {
-            let _ = t.clone().into_table().and_then(|light| {
-                match light.get("covered") {
-                    Some(t) => {
-                        let _ = t.clone().into_table().and_then(|covered| {
-                            match covered.get("default") {
-                                Some(c) => colors.light_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            match covered.get("neighbour") {
-                                Some(c) => colors.light_covered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            Ok(())
-                        });
-                    },
-                    None => {}
-                }
-                match light.get("uncovered") {
-                    Some(t) => {
-                        let _ = t.clone().into_table().and_then(|uncovered| {
-                            match uncovered.get("default") {
-                                Some(c) => colors.light_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            match uncovered.get("neighbour") {
-                                Some(c) => colors.light_uncovered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            Ok(())
-                        });
-                    },
-                    None => {}
-                }
-                Ok(())
-            });
-        },
-        None => {}
+    if let Some(t) = tab.get("light") {
+        let _ = t.clone().into_table().and_then(|light| {
+            if let Some(t) = light.get("covered") {
+                let _ = t.clone().into_table().and_then(|covered| {
+                    if let Some(c) = covered.get("default") {
+                        colors.light_covered_default = str_to_color(c.clone());
+                    }
+                    if let Some(c) = covered.get("neighbour") {
+                        colors.light_covered_neighbour = str_to_color(c.clone());
+                    }
+                    Ok(())
+                });
+            }
+            if let Some(t) = light.get("uncovered") {
+                let _ = t.clone().into_table().and_then(|uncovered| {
+                    if let Some(c) = uncovered.get("default") {
+                        colors.light_uncovered_default = str_to_color(c.clone());
+                    }
+                    if let Some(c) = uncovered.get("neighbour") {
+                        colors.light_uncovered_neighbour = str_to_color(c.clone());
+                    }
+                    Ok(())
+                });
+            }
+            Ok(())
+        });
     }
-    match tab.get("dark") {
-        Some(t) => {
-            let _ = t.clone().into_table().and_then(|dark| {
-                match dark.get("covered") {
-                    Some(t) => {
-                        let _ = t.clone().into_table().and_then(|covered| {
-                            match covered.get("default") {
-                                Some(c) => colors.dark_covered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            match covered.get("neighbour") {
-                                Some(c) => colors.dark_covered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            Ok(())
-                        });
-                    },
-                    None => {}
-                }
-                match dark.get("uncovered") {
-                    Some(t) => {
-                        let _ = t.clone().into_table().and_then(|uncovered| {
-                            match uncovered.get("default") {
-                                Some(c) => colors.dark_uncovered_default = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            match uncovered.get("neighbour") {
-                                Some(c) => colors.dark_uncovered_neighbour = color_from_str(&c.clone().into_string().expect("Colors must be strings")),
-                                None => {}
-                            }
-                            Ok(())
-                        });
-                    },
-                    None => {}
-                }
-                Ok(())
-            });
-        },
-        None => {}
+    if let Some(t) = tab.get("dark") {
+        let _ = t.clone().into_table().and_then(|dark| {
+            if let Some(t) = dark.get("covered") {
+                let _ = t.clone().into_table().and_then(|covered| {
+                    if let Some(c) = covered.get("default") {
+                        colors.dark_covered_default = str_to_color(c.clone());
+                    }
+                    if let Some(c) = covered.get("neighbour") {
+                        colors.dark_covered_neighbour = str_to_color(c.clone());
+                    }
+                    Ok(())
+                });
+            }
+            if let Some(t) = dark.get("uncovered") {
+                let _ = t.clone().into_table().and_then(|uncovered| {
+                    if let Some(c) = uncovered.get("default") {
+                        colors.dark_uncovered_default = str_to_color(c.clone());
+                    }
+                    if let Some(c) = uncovered.get("neighbour") {
+                        colors.dark_uncovered_neighbour = str_to_color(c.clone());
+                    }
+                    Ok(())
+                });
+            }
+            Ok(())
+        });
     }
     return colors;
 }
