@@ -2662,14 +2662,16 @@ impl App {
             match global_function {
                 GlobalFunction::QuitAll => self.quit(),
                 GlobalFunction::Quit => {
-                    if matches!(self.game.state, MinesweeperGameState::Running) {
-                        if matches!(self.game.field.state, MinesweeperFieldState::New) || matches!(self.game.field.state, MinesweeperFieldState::Running) || matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
-                            self.quit();
-                        } else {
-                            self.game.field.state = MinesweeperFieldState::RevealField;
-                        }
-                    } else {
-                        self.game.state = MinesweeperGameState::Running;
+                    match self.game.state {
+                        MinesweeperGameState::Running => {
+                            if matches!(self.game.field.state, MinesweeperFieldState::New) || matches!(self.game.field.state, MinesweeperFieldState::Running) || matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
+                                self.quit();
+                            } else {
+                                self.game.field.state = MinesweeperFieldState::RevealField;
+                            }
+                        },
+                        MinesweeperGameState::TooSmall => self.quit(),
+                        _ => self.game.state = MinesweeperGameState::Running,
                     }
                 },
                 GlobalFunction::Controls => {
