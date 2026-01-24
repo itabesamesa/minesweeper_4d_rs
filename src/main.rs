@@ -34,7 +34,7 @@ use rand::{
 };
 use chrono::{DateTime, Local, FixedOffset};
 use len_trait::Len;
-use directories::UserDirs;
+use directories::{UserDirs, ProjectDirs};
 use config::{Config, Value, ValueKind, Map};
 
 #[derive(Clone, Debug, Default)]
@@ -2278,14 +2278,6 @@ fn config_keymap_global(tab: Map<String, Value>) -> HashMap<(KeyModifiers, KeyCo
 }
 
 fn main() -> color_eyre::Result<()> {
-    let settings = Config::builder()
-        // Add in `./Settings.toml`
-        .add_source(config::File::with_name("./config.toml"))
-        // Add in settings from the environment (with a prefix of APP)
-        // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-        .add_source(config::Environment::with_prefix("APP"))
-        .build()
-        .unwrap();
     let mut dim = Point {x: 4, y: 4, z: 4, w: 4};
     let mut mines: u16 = 20;
     let mut show_info = true;
@@ -2299,6 +2291,7 @@ fn main() -> color_eyre::Result<()> {
     let mut dir = UserDirs::new().unwrap().download_dir().unwrap().to_path_buf();
     let mut file_name = String::new();
     let mut args = env::args();
+    let mut config: Option<PathBuf> = None;
     let Some(program) = args.next() else {panic!("WTF?")};
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -2307,20 +2300,21 @@ fn main() -> color_eyre::Result<()> {
                 println!("{}", controls.title);
                 print!("{}", controls.as_str(2));
                 println!("Commandline arguments");
-                println!("  -h, -?, --help            Show this menu");
-                println!("  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4");
-                println!("  -m, --mines               Change amount of mines. An unsigned integer");
-                println!("  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -s, --seed                Set seed. An unsigned integer");
-                println!("  -r, --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
-                println!("  -o, --dir                 Where to output save files. Default is \"{}\"", dir.to_str().unwrap());
+                println!("  -h,  -?, --help            Show this menu");
+                println!("  -d,  --dim, --dimension    Change field dimensions. An array of integers greater than 0 e.g.: -d 4 4 4 4");
+                println!("  -m,  --mines               Change amount of mines. An integer greater than 0");
+                println!("  -i,  --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -u,  --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -U,  --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -s,  --seed                Set seed. An unsigned integer");
+                println!("  -r,  --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -cm, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)");
+                println!("  -c,  --config              Path of configuration file to use");
+                println!("  -o,  --dir                 Where to output save files. Default is \"{}\"", dir.to_str().unwrap());
                 println!("Default settings as a command");
-                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -r t -c f");
+                println!("  {program} -d 4 4 4 4 -m 20 -i t -u t -U f -r t -cm f");
                 println!("Classic Minesweeper as a command... Weirdo...");
-                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t");
+                println!("  {program} -d 16 16 1 1 -m 40 -i t -u f -U f -r t -cm t");
                 return Ok(())
             },
             "-d" | "--dim" | "--dimension" => {
@@ -2395,7 +2389,7 @@ fn main() -> color_eyre::Result<()> {
                 seed = value.parse::<u64>()
                     .expect(format!("Value \"{}\" has wrong type for argument \"{}\"", value, arg).as_str());
             },
-            "-c" | "--capture_mouse" => {
+            "-cm" | "--capture_mouse" => {
                 let v = args.next()
                     .expect(format!("You must provide a boolean for argument \"{}\"", arg).as_str());
                 match v.to_lowercase().as_str() {
@@ -2409,12 +2403,30 @@ fn main() -> color_eyre::Result<()> {
                     .expect(format!("You must provide a directory for argument \"{}\"", arg).as_str()));
                 if !dir.is_dir() {panic!("\"{}\" is not a directory", dir.to_str().unwrap());}
             },
+            "-c" | "--config" => {
+                let tmp = PathBuf::from(&args.next()
+                    .expect(format!("You must provide a file for argument \"{}\"", arg).as_str()));
+                if !tmp.is_file() {panic!("\"{}\" is not a file", tmp.to_str().unwrap());}
+                config = Some(tmp);
+            },
             &_ => {
                 load_file = true;
                 file_name = arg;
             }
         }
     }
+    let settings = Config::builder()
+        .add_source(config::File::from(
+                match config {
+                    Some(c) => c,
+                    None => {
+                        let cfg = ProjectDirs::from("", "",  &program).unwrap().config_dir().join("config.toml");
+                        if !cfg.is_file() {panic!("\"{}\" is not a file or doesn't exists. Download the default config.toml from https://github.com/itabesamesa/minesweeper_4d_rs", cfg.to_str().unwrap());}
+                        cfg.to_path_buf()
+                    }
+                }))
+        .build()
+        .unwrap();
     color_eyre::install()?;
     let terminal = ratatui::init();
     let result = App::new(

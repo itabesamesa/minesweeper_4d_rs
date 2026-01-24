@@ -74,47 +74,53 @@ In theory, this program should be OS agnostic (except for seeds https://docs.rs/
 
 ```
 cargo install minesweeper_4d
+mkdir -p $HOME/.config/minesweeper_4d
+curl https://raw.githubusercontent.com/itabesamesa/minesweeper_4d_rs/refs/heads/config/config.toml -o $HOME/.config/minesweeper_4d/config.toml
 ```
 
 or
 
-Build:
+from source:
 
 ```
-cargo build --release
+cargo install --path .
+mkdir -p $HOME/.config/minesweeper_4d
+cp ./config.toml $HOME/.config/minesweeper_4d/
 ```
 
 Run:
 
 ```
-./target/release/minesweeper_4d
+minesweeper_4d
 ```
 
 ### Commandline arguments
 
 <pre>
-  -h, -?, --help            Show this menu
-  -d, --dim, --dimension    Change field dimensions. An array of unsigned integers e.g.: -d 4 4 4 4
-  -m, --mines               Change amount of mines. An unsigned integer
-  -i, --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
-  -u, --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
-  -U, --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
-  -s, --seed                Set seed. An unsigned integer
-  -r, --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
-  -c, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
-  -o, --dir                 Where to output save files. Default is "~/Downloads"
+  -h,  -?, --help            Show this menu
+  -d,  --dim, --dimension    Change field dimensions. An array of integers greater than 0 e.g.: -d 4 4 4 4
+  -m,  --mines               Change amount of mines. An integer greater than 0
+  -i,  --show_info           Toggle info box. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
+  -u,  --delta_mode          Toggle delta mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
+  -U,  --sweep_mode          Toggle sweep mode. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
+  -s,  --seed                Set seed. An unsigned integer
+  -r,  --random              Toggle random seed. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
+  -cm, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
+  -c,  --config              Path of configuration file to use
+  -o,  --dir                 Where to output save files. Default is "~/Downloads"
+Default settings as a command
 </pre>
 
 Default settings as a command
 
 ```
-minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f -r t -c f
+minesweeper_4d -d 4 4 4 4 -m 20 -i t -u t -U f -r t -cm f
 ```
 
 Classic Minesweeper as a command... Weirdo...
 
 ```
-minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -c t
+minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -cm t
 ```
 
 ## TODO
