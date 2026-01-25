@@ -75,7 +75,7 @@ In theory, this program should be OS agnostic ( except for seeds https://docs.rs
 ```
 cargo install minesweeper_4d
 mkdir -p $HOME/.config/minesweeper_4d
-curl https://raw.githubusercontent.com/itabesamesa/minesweeper_4d_rs/refs/heads/config/config.toml -o $HOME/.config/minesweeper_4d/config.toml
+curl https://raw.githubusercontent.com/itabesamesa/minesweeper_4d_rs/refs/heads/main/config.toml -o $HOME/.config/minesweeper_4d/config.toml
 ```
 
 or
@@ -123,6 +123,34 @@ Classic Minesweeper as a command... Weirdo...
 minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -cm t
 ```
 
+## Config
+
+> [!WARNING]
+> The way the config is implemented, is a bit jank... It is better you don't randomly remove things/leave them unset
+
+### keymap
+
+The keymap is split into 3 sections: global (implied rather than explicitly in the config), movement and game. Global keys work in every state (running, settings, controls, too small), movement for movement (i know right?) and game for any functions specific to the running state/you playing the game. They all accept a list of strings or just a single string. The string can be the name of a key
+
+> [!NOTE]
+> Supported are: backspace, enter, left, leftarrow, right, rightarrow, up, uparrow, down, downarrow, end, pageup, pagedown, tab, backtab, delete, insert, esc, escape
+
+or a character.
+
+> [!NOTE]
+> Characters are case sensitive!
+
+Modifiers are added to the start, separated by "-"
+
+> [!NOTE]
+> Supported are: shift, ctrl, control, alt, super, hyper, meta. ( In code, this function is used: https://docs.rs/crossterm/latest/crossterm/event/struct.KeyModifiers.html#method.from_name )
+
+### style
+
+Style is separated into game.color and the rest. In theory, game.color is optional (I have not tested this tho...). The values of game.color can be either the name of a color or the RGB hexadecimal representation, prefixed with "#"
+
+The rest are the alignment options for the info, controls, settings and the controls for the settings panels. They can be set to: left, right, center
+
 ## TODO
 
 - [x] Make swapping to and from delta_mode possible
@@ -135,8 +163,10 @@ minesweeper_4d -d 16 16 1 1 -m 40 -i t -u f -U f -r t -cm t
 - [x] Make Controls scrollable _custom implementation instead of ratatui Scrollbar_
 - [ ] Make it possible to win when there are 0 mines
 - [ ] ~~Make game state message part of game instead of field~~
-- [ ] Config (coming soon tm, currently on a different branch (you'll have to use an earlier commit tho))
+- [x] Config ~~(coming soon tm, currently on a different branch (you'll have to use an earlier commit tho))~~
 - [ ] Create launch option for people who don't have a Unicode font available (for now install smth like noto)
+- [ ] Fix "Shift" being displayed next to uppercase letters
+- [ ] Make "-" mappable
 
 ## License
 

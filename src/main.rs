@@ -129,7 +129,6 @@ pub enum GameFunction {
     Flag,
     FlagChording,
     Pause,
-    Save,
     ToggleInfo,
     ToggleDelta,
     ToggleSweep,
@@ -137,6 +136,7 @@ pub enum GameFunction {
     MarkUncover,
     MarkFlag,
     MarkClear,
+    Save,
 }
 
 #[derive(Debug, Default, Clone, Eq, Hash, PartialEq)]
@@ -265,12 +265,24 @@ impl<T: std::fmt::Display> Widget for KeyValueList<T> {
         let tmp = self.array[start..end].into_iter().enumerate();
         let (keys, values): (Vec<ratatui::prelude::Line>, Vec<ratatui::prelude::Line>) = if self.highlight {
             tmp.map(|x| {
-                if x.0 == self.pos-start {
-                    (Line::raw(x.1.0.clone()).style(Modifier::UNDERLINED), Line::raw(format!("{}", x.1.1)).style(Modifier::UNDERLINED))
-                } else {
-                    (Line::raw(x.1.0.clone()), Line::raw(format!("{}", x.1.1)))
+                let k = if x.1.0.len() > layout[0].width.into() {x.1.0.get(0..layout[0].width.into()).unwrap()} else {&x.1.0};
+                let mut v = x.1.1.to_string();
+                if v.len() > layout[1].width.into() {
+                    v = v.get(0..layout[1].width.into()).unwrap().to_owned();
                 }
-            }).unzip()} else {tmp.map(|x| (Line::raw(x.1.0.clone()), Line::raw(format!("{}", x.1.1)))).unzip()};
+                if x.0 == self.pos-start {
+                    (Line::raw(k).style(Modifier::UNDERLINED), Line::raw(v).style(Modifier::UNDERLINED))
+                } else {
+                    (Line::raw(k), Line::raw(v))
+                }
+            }).unzip()} else {tmp.map(|x| {
+                let k = if x.1.0.len() > layout[0].width.into() {x.1.0.get(0..layout[0].width.into()).unwrap()} else {&x.1.0};
+                let mut v = x.1.1.to_string();
+                if v.len() > layout[1].width.into() {
+                    v = v.get(0..layout[1].width.into()).unwrap().to_owned();
+                }
+                (Line::raw(k), Line::raw(v))
+            }).unzip()};
         block.render(area, buf);
         Paragraph::new(keys)
             .style(Style::new().white())
@@ -1609,65 +1621,108 @@ impl Widget for MinesweeperGame {
     }
 }
 
+fn key_to_string(key: (KeyModifiers, KeyCode)) -> String {
+    if key.0 != KeyModifiers::NONE {
+        let mut mods = key.0.to_string();
+        let tmp = mods.clone();
+        let mut starts: Vec<_> = tmp.rmatch_indices(|c: char| c.is_uppercase()).collect();
+        let _ = starts.pop();
+        for (i, _) in &starts {
+            mods.insert(*i, '-');
+        }
+        format!("{}-{}, ", mods, key.1.to_string())
+    } else {
+        format!("{}, ", key.1.to_string())
+    }
+}
+
+fn keymap_to_string<T: Eq>(map: &HashMap<(KeyModifiers, KeyCode), T>, f: T) -> String {
+    let mut s = String::new();
+    for (key, func) in map.iter() {
+        if f == *func {
+            s.push_str(&key_to_string(*key));
+        }
+    }
+    s.pop();
+    s.pop();
+    s
+}
+
 impl MinesweeperGame {
     fn init(&mut self, dim: Point, mines: u16, show_info: bool, delta_mode: bool, sweep_mode: bool, seed: u64) {
         self.field.init(dim, mines, delta_mode, sweep_mode, seed);
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
-        self.set_info((Alignment::Left, Alignment::Left));
-        self.controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
-        self.settings = self.get_settings((Alignment::Left, Alignment::Left), (Alignment::Left, Alignment::Left));
+        self.set_info();
     }
 
-    fn set_info(&mut self, alignment: (Alignment, Alignment)) {
-        self.info = self.get_info(alignment); // 10 cause it looks good...
+    fn set_info(&mut self) {
+        self.info = self.get_info(); // 10 cause it looks good...
         self.info_panel_min_width = self.info.constraint_len_key+2+self.info.constraint_len_value;
         self.info_panel_max_width = self.info.constraint_len_key+10+self.info.constraint_len_value;
     }
 
-    fn get_controls(alignment: (Alignment, Alignment)) -> KeyValueList<String> {
-        KeyValueList::new(true, "Game Controls".to_string(), alignment, vec![
-            ("Quit all:".to_string(),                       "ctrl+c".to_string()),
-            ("Quit:".to_string(),                           "q, ESC".to_string()),
-            ("Controls:".to_string(),                       "c".to_string()),
-            ("Settings:".to_string(),                       "o".to_string()),
-            ("Move left in x:".to_string(),                 "Leftarrow,  h".to_string()),
-            ("Move right in x:".to_string(),                "Rightarrow, l".to_string()),
-            ("Move up in y:".to_string(),                   "Uparrow,    k".to_string()),
-            ("Move down in y:".to_string(),                 "Downarrow,  j".to_string()),
-            ("Move left in z:".to_string(),                 "a, ctrl+h".to_string()),
-            ("Move right in z:".to_string(),                "d, ctrl+l".to_string()),
-            ("Move up in w:".to_string(),                   "w, ctrl+k".to_string()),
-            ("Move down in w:".to_string(),                 "s, ctrl+j".to_string()),
-            ("Move to start in x:".to_string(),             "shift+Leftarrow,  H".to_string()),
-            ("Move to end in x:".to_string(),               "shift+Rightarrow, L".to_string()),
-            ("Move to top in y:".to_string(),               "shift+Uparrow,    K".to_string()),
-            ("Move to bottom in y:".to_string(),            "shift+Downarrow,  J".to_string()),
-            ("Move to start in z:".to_string(),             "A, alt+h".to_string()),
-            ("Move to end in z:".to_string(),               "D, alt+l".to_string()),
-            ("Move to top in w:".to_string(),               "W, alt+k".to_string()),
-            ("Move to bottom in w:".to_string(),            "S, alt+j".to_string()),
-            ("Retry game:".to_string(),                     "r".to_string()),
-            ("New game:".to_string(),                       "n".to_string()),
-            ("Find free cell:".to_string(),                 "f".to_string()),
-            ("Uncover cell:".to_string(),                   "SPACE".to_string()),
-            ("Give up/reveal field:".to_string(),           "g".to_string()),
-            ("Flag cell:".to_string(),                      "m, e".to_string()),
-            ("Flag cell chording:".to_string(),             "M, E".to_string()),
-            ("Pause game:".to_string(),                     "p".to_string()),
-            ("Toggle info:".to_string(),                    "i".to_string()),
-            ("Toggle delta mode:".to_string(),              "u".to_string()),
-            ("Toggle sweep mode:".to_string(),              "U".to_string()),
-            ("Mark cell:".to_string(),                      "x".to_string()),
-            ("Uncover obvious marked cells:".to_string(),   "X".to_string()),
-            ("Flag obvious marked cells:".to_string(),      "alt+x".to_string()),
-            ("Clear all marks:".to_string(),                "ctrl+x".to_string()),
-            ("Save game:".to_string(),                      "ctrl+o".to_string()),
+    fn init_controls_and_settings(&mut self,
+        global_keymap: HashMap<(KeyModifiers, KeyCode), GlobalFunction>,
+        movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>,
+        game_keymap: HashMap<(KeyModifiers, KeyCode), GameFunction>
+        ) {
+        eprintln!("{}", keymap_to_string(&global_keymap, GlobalFunction::Quit));
+        self.controls = MinesweeperGame::get_controls(
+            &global_keymap,
+            &movement_keymap,
+            &game_keymap
+            );
+        self.settings = self.get_settings(&global_keymap);
+    }
+
+    fn get_controls(
+        global_keymap: &HashMap<(KeyModifiers, KeyCode), GlobalFunction>,
+        movement_keymap: &HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>,
+        game_keymap: &HashMap<(KeyModifiers, KeyCode), GameFunction>
+        ) -> KeyValueList<String> {
+        KeyValueList::new(true, "Game Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
+            ("Quit all:".to_string(),                       keymap_to_string(global_keymap, GlobalFunction::QuitAll)),
+            ("Quit:".to_string(),                           keymap_to_string(global_keymap, GlobalFunction::Quit)),
+            ("Controls:".to_string(),                       keymap_to_string(global_keymap, GlobalFunction::Controls)),
+            ("Settings:".to_string(),                       keymap_to_string(global_keymap, GlobalFunction::Settings)),
+            ("Move left in x:".to_string(),                 keymap_to_string(movement_keymap, (Movement::Left,  Dimension::X, false))),
+            ("Move right in x:".to_string(),                keymap_to_string(movement_keymap, (Movement::Right, Dimension::X, false))),
+            ("Move up in y:".to_string(),                   keymap_to_string(movement_keymap, (Movement::Up,    Dimension::Y, false))),
+            ("Move down in y:".to_string(),                 keymap_to_string(movement_keymap, (Movement::Down,  Dimension::Y, false))),
+            ("Move left in z:".to_string(),                 keymap_to_string(movement_keymap, (Movement::Left,  Dimension::Z, false))),
+            ("Move right in z:".to_string(),                keymap_to_string(movement_keymap, (Movement::Right, Dimension::Z, false))),
+            ("Move up in w:".to_string(),                   keymap_to_string(movement_keymap, (Movement::Up,    Dimension::W, false))),
+            ("Move down in w:".to_string(),                 keymap_to_string(movement_keymap, (Movement::Down,  Dimension::W, false))),
+            ("Move to start in x:".to_string(),             keymap_to_string(movement_keymap, (Movement::Left,  Dimension::X, true))),
+            ("Move to end in x:".to_string(),               keymap_to_string(movement_keymap, (Movement::Right, Dimension::X, true))),
+            ("Move to top in y:".to_string(),               keymap_to_string(movement_keymap, (Movement::Up,    Dimension::Y, true))),
+            ("Move to bottom in y:".to_string(),            keymap_to_string(movement_keymap, (Movement::Down,  Dimension::Y, true))),
+            ("Move to start in z:".to_string(),             keymap_to_string(movement_keymap, (Movement::Left,  Dimension::Z, true))),
+            ("Move to end in z:".to_string(),               keymap_to_string(movement_keymap, (Movement::Right, Dimension::Z, true))),
+            ("Move to top in w:".to_string(),               keymap_to_string(movement_keymap, (Movement::Up,    Dimension::W, true))),
+            ("Move to bottom in w:".to_string(),            keymap_to_string(movement_keymap, (Movement::Down,  Dimension::W, true))),
+            ("New game:".to_string(),                       keymap_to_string(game_keymap, GameFunction::New)),
+            ("Retry game:".to_string(),                     keymap_to_string(game_keymap, GameFunction::Retry)),
+            ("Find free cell:".to_string(),                 keymap_to_string(game_keymap, GameFunction::Free)),
+            ("Uncover cell:".to_string(),                   keymap_to_string(game_keymap, GameFunction::Uncover)),
+            ("Give up/reveal field:".to_string(),           keymap_to_string(game_keymap, GameFunction::Capitulate)),
+            ("Flag cell:".to_string(),                      keymap_to_string(game_keymap, GameFunction::Flag)),
+            ("Flag cell chording:".to_string(),             keymap_to_string(game_keymap, GameFunction::FlagChording)),
+            ("Pause game:".to_string(),                     keymap_to_string(game_keymap, GameFunction::Pause)),
+            ("Toggle info:".to_string(),                    keymap_to_string(game_keymap, GameFunction::ToggleInfo)),
+            ("Toggle delta mode:".to_string(),              keymap_to_string(game_keymap, GameFunction::ToggleDelta)),
+            ("Toggle sweep mode:".to_string(),              keymap_to_string(game_keymap, GameFunction::ToggleSweep)),
+            ("Mark cell:".to_string(),                      keymap_to_string(game_keymap, GameFunction::MarkSet)),
+            ("Uncover obvious marked cells:".to_string(),   keymap_to_string(game_keymap, GameFunction::MarkUncover)),
+            ("Flag obvious marked cells:".to_string(),      keymap_to_string(game_keymap, GameFunction::MarkFlag)),
+            ("Clear all marks:".to_string(),                keymap_to_string(game_keymap, GameFunction::MarkClear)),
+            ("Save game:".to_string(),                      keymap_to_string(game_keymap, GameFunction::Save)),
         ])
     }
 
-    fn get_info(&self, alignment: (Alignment, Alignment)) -> KeyValueList<String> {
-        KeyValueList::new(false, "Game Info".to_string(), alignment, vec![
+    fn get_info(&self) -> KeyValueList<String> {
+        KeyValueList::new(false, "Game Info".to_string(), (Alignment::Left, Alignment::Left), vec![
             ("Delta mode:".to_string(),      self.field.delta_mode_str()),
             ("Sweep mode:".to_string(),      self.field.sweep_mode_str()),
             ("Cells uncovered:".to_string(), self.field.cells_uncovered_str()),
@@ -1681,9 +1736,9 @@ impl MinesweeperGame {
         ])
     }
 
-    fn get_settings(&self, alignment_settings: (Alignment, Alignment), alignment_controls: (Alignment, Alignment)) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
+    fn get_settings(&self, global_keymap: &HashMap<(KeyModifiers, KeyCode), GlobalFunction>) -> (KeyValueList<SettingsOption>, KeyValueList<String>) {
         (
-            KeyValueList::new(true, "Game Settings".to_string(), alignment_settings, vec![
+            KeyValueList::new(true, "Game Settings".to_string(), (Alignment::Left, Alignment::Left), vec![
                 ("Size".to_string(),             SettingsOption {enabled: false, option_type: SettingsOptionTypes::None, value: 0, min: 0, max: 0}),
                 ("├─ x:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.x as u64, min: 1, max: i16::MAX as u64}),
                 ("├─ y:".to_string(),            SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: self.field.dim.y as u64, min: 1, max: i16::MAX as u64}),
@@ -1696,10 +1751,10 @@ impl MinesweeperGame {
                 ("Use random seed:".to_string(), SettingsOption {enabled: true, option_type: SettingsOptionTypes::Bool, value: 1, min: 0, max: 1}),
                 ("└─ Seed:".to_string(),         SettingsOption {enabled: true, option_type: SettingsOptionTypes::Int, value: 0, min: 0, max: u64::MAX}),
             ]),
-            KeyValueList::new(false, "Settings Controls".to_string(), alignment_controls, vec![
-                ("Exit".to_string(),             "q, ESC".to_string()),
-                ("Controls:".to_string(),        "c".to_string()),
-                ("Save and exit".to_string(),    "o".to_string()),
+            KeyValueList::new(false, "Settings Controls".to_string(), (Alignment::Left, Alignment::Left), vec![
+                ("Exit".to_string(),             keymap_to_string(global_keymap, GlobalFunction::Quit)),
+                ("Controls:".to_string(),        keymap_to_string(global_keymap, GlobalFunction::Controls)),
+                ("Save and exit".to_string(),    keymap_to_string(global_keymap, GlobalFunction::Settings)),
                 ("Move up:".to_string(),         "any up movement key".to_string()),
                 ("Move down:".to_string(),       "any down movement key".to_string()),
                 ("Increment value:".to_string(), "any right movement key, +".to_string()),
@@ -1839,7 +1894,7 @@ Grid:
         if !(path.exists() && path.is_file()) {
             panic!("Path \"{file_name}\" doesn't exist or isn't a file");
         } //unwrap already panics, i just don't like the error message, sooo
-        let info = MinesweeperGame::default().get_info((Alignment::Left, Alignment::Left));
+        let info = MinesweeperGame::default().get_info();
         let binding = read_to_string(path).unwrap();
         let mut lines = binding.lines();
         let mut found_grid = false;
@@ -2008,9 +2063,7 @@ Grid:
         if loc.w+1 != self.field.dim.w {panic!("Inconsistent w dimension in file \"{}\"", file_name);}
         self.state = MinesweeperGameState::Running;
         self.show_info = show_info;
-        self.set_info((Alignment::Left, Alignment::Left));
-        self.controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
-        self.settings = self.get_settings((Alignment::Left, Alignment::Left), (Alignment::Left, Alignment::Left));
+        self.set_info();
         self.field.set_active_cell(true);
     }
 }
@@ -2284,7 +2337,22 @@ fn main() -> color_eyre::Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "-?" | "--help" => {
-                let controls = MinesweeperGame::get_controls((Alignment::Left, Alignment::Left));
+                let settings = Config::builder()
+                    .add_source(config::File::from(
+                        match config {
+                            Some(c) => c,
+                            None => {
+                                let cfg = ProjectDirs::from("", "",  &program).unwrap().config_dir().join("config.toml");
+                                if !cfg.is_file() {panic!("\"{}\" is not a file or doesn't exists. Download the default config.toml from https://github.com/itabesamesa/minesweeper_4d_rs", cfg.to_str().unwrap());}
+                                cfg.to_path_buf()
+                            }
+                        }))
+                    .build()
+                    .unwrap();
+                let controls = MinesweeperGame::get_controls(
+                    &config_keymap_global(settings.get_table("keymap").unwrap()),
+                    &config_keymap_movement(settings.get_table("keymap.movement").unwrap()),
+                    &config_keymap_game(settings.get_table("keymap.game").unwrap()));
                 println!("{}", controls.title);
                 print!("{}", controls.as_str(2));
                 println!("Commandline arguments");
@@ -2409,14 +2477,14 @@ fn main() -> color_eyre::Result<()> {
     }
     let settings = Config::builder()
         .add_source(config::File::from(
-                match config {
-                    Some(c) => c,
-                    None => {
-                        let cfg = ProjectDirs::from("", "",  &program).unwrap().config_dir().join("config.toml");
-                        if !cfg.is_file() {panic!("\"{}\" is not a file or doesn't exists. Download the default config.toml from https://github.com/itabesamesa/minesweeper_4d_rs", cfg.to_str().unwrap());}
-                        cfg.to_path_buf()
-                    }
-                }))
+            match config {
+                Some(c) => c,
+                None => {
+                    let cfg = ProjectDirs::from("", "",  &program).unwrap().config_dir().join("config.toml");
+                    if !cfg.is_file() {panic!("\"{}\" is not a file or doesn't exists. Download the default config.toml from https://github.com/itabesamesa/minesweeper_4d_rs", cfg.to_str().unwrap());}
+                    cfg.to_path_buf()
+                }
+            }))
         .build()
         .unwrap();
     color_eyre::install()?;
@@ -2493,6 +2561,11 @@ impl App {
         } else {
             self.game.init(dim, mines, show_info, delta_mode, sweep_mode, if set_seed {seed} else {rand::random::<u64>()});
         }
+        self.game.init_controls_and_settings(
+            self.global_keymap.clone(),
+            self.movement_keymap.clone(),
+            self.game_keymap.clone()
+            );
         self.game.settings.0.array[9].1.value = if rand_seed {1} else {0};
         self.game.info.alignment = alignment_info;
         self.game.controls.alignment = alignment_controls;
