@@ -108,7 +108,6 @@ minesweeper_4d
   -cm, --capture_mouse       Wether to allow mouse interaction. A boolean value t/f or true/false or y/n or yes/no or on/off (any capitalisation)
   -c,  --config              Path of configuration file to use
   -o,  --dir                 Where to output save files. Default is "~/Downloads"
-Default settings as a command
 </pre>
 
 Default settings as a command
