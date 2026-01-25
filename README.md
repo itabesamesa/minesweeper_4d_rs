@@ -145,9 +145,16 @@ Modifiers are added to the start, separated by "-"
 > [!NOTE]
 > Supported are: shift, ctrl, control, alt, super, hyper, meta. ( In code, this function is used: https://docs.rs/crossterm/latest/crossterm/event/struct.KeyModifiers.html#method.from_name )
 
+In the settings menu, there are a few hard coded keys. Those are: 0-9, y, t, n, f, -, +, delete
+
 ### style
 
-Style is separated into game.color and the rest. In theory, game.color is optional (I have not tested this tho...). The values of game.color can be either the name of a color or the RGB hexadecimal representation, prefixed with "#"
+Style is separated into game.color and the rest. In theory, game.color is optional (I have not tested this tho...). The values of game.color can be either the name of a color
+
+> [!NOTE]
+> In code, this function is used: https://docs.rs/ratatui/latest/ratatui/style/enum.Color.html#method.from_str
+
+or the RGB hexadecimal representation, prefixed with "#"
 
 The rest are the alignment options for the info, controls, settings and the controls for the settings panels. They can be set to: left, right, center
 
@@ -167,6 +174,7 @@ The rest are the alignment options for the info, controls, settings and the cont
 - [ ] Create launch option for people who don't have a Unicode font available (for now install smth like noto)
 - [ ] Fix "Shift" being displayed next to uppercase letters
 - [ ] Make "-" mappable
+- [ ] Scrolling happening before the cursor is in the middle
 
 ## License
 

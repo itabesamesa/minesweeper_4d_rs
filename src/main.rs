@@ -1667,7 +1667,6 @@ impl MinesweeperGame {
         movement_keymap: HashMap<(KeyModifiers, KeyCode), (Movement, Dimension, bool)>,
         game_keymap: HashMap<(KeyModifiers, KeyCode), GameFunction>
         ) {
-        eprintln!("{}", keymap_to_string(&global_keymap, GlobalFunction::Quit));
         self.controls = MinesweeperGame::get_controls(
             &global_keymap,
             &movement_keymap,
@@ -2766,7 +2765,10 @@ impl App {
                     if matches!(self.game.state, MinesweeperGameState::Controls) {
                         self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
                     } else {
-                        self.game.field.state = MinesweeperFieldState::Paused;
+                        if matches!(self.game.field.state, MinesweeperFieldState::Running) || matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
+                            self.game.field.state = MinesweeperFieldState::Paused;
+                            self.game.update_info_state();
+                        }
                         self.game.state = MinesweeperGameState::Controls;
                     }
                 },
@@ -2776,7 +2778,10 @@ impl App {
                         self.game.regenerate_field();
                         self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
                     } else {
-                        self.game.field.state = MinesweeperFieldState::Paused;
+                        if matches!(self.game.field.state, MinesweeperFieldState::Running) || matches!(self.game.field.state, MinesweeperFieldState::RevealField) {
+                            self.game.field.state = MinesweeperFieldState::Paused;
+                            self.game.update_info_state();
+                        }
                         self.game.state = MinesweeperGameState::Settings;
                     }
                 },
@@ -2883,7 +2888,7 @@ impl App {
                                         self.game.update_info_mines_flagged();
                                         if self.game.field.sweep_mode {self.game.update_info_cells_uncovered()};
                                     },
-                                    GameFunction::Pause => self.game.field.state = MinesweeperFieldState::Paused,
+                                    GameFunction::Pause => if matches!(self.game.field.state, MinesweeperFieldState::Running) {self.game.field.state = MinesweeperFieldState::Paused;},
                                     GameFunction::Save => self.game.save_game(self.dir.clone()),
                                     GameFunction::ToggleInfo => {
                                         self.game.show_info = !self.game.show_info;
@@ -2925,6 +2930,7 @@ impl App {
                                 match game_function {
                                     GameFunction::New => self.game.regenerate_field(),
                                     GameFunction::Retry => self.game.regenerate_field_same_seed(),
+                                    GameFunction::Pause => self.game.field.state = MinesweeperFieldState::Running,
                                     GameFunction::ToggleInfo => {
                                         self.game.show_info = !self.game.show_info;
                                         self.check_size(self.area.width, self.area.height, MinesweeperGameState::Running);
